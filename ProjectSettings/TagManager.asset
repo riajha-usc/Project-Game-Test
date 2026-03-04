@@ -4,14 +4,15 @@
 TagManager:
   serializedVersion: 3
   tags:
-  - Enemy
   - Projectile
   - HpBooster
+  - Enemy
+  - Pulser
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - Divider
+  - 
   - Water
   - UI
   - 
