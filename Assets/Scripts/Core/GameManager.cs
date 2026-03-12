@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 public class GameManager : MonoBehaviour
 {
@@ -19,7 +20,10 @@ public class GameManager : MonoBehaviour
     [HideInInspector] public int deathsToEnemy;
     [HideInInspector] public int incorrectKeyCount;
     [HideInInspector] public int incorrectCodeCount;
+    [HideInInspector] public int keyAttemptCount;
+    [HideInInspector] public int codeAttemptCount;
     [HideInInspector] public int cluesSolved;
+    HashSet<int> readClueIndices = new HashSet<int>();
     [HideInInspector] public float levelStartTime;
     [HideInInspector] public float levelCompleteTime;
 
@@ -30,6 +34,8 @@ public class GameManager : MonoBehaviour
     [HideInInspector] public string lane2CorrectColor;
     [HideInInspector] public bool lane2CorrectKeySpinning;
     [HideInInspector] public List<string> lane2Clues = new List<string>();
+
+    public string finalAnswer;
 
     public enum GameState
     {
@@ -81,9 +87,20 @@ public class GameManager : MonoBehaviour
         incorrectCodeCount++;
     }
 
-    public void RecordClueSolved()
+    public void RecordKeyAttempt()
     {
-        cluesSolved++;
+        keyAttemptCount++;
+    }
+
+    public void RecordCodeAttempt()
+    {
+        codeAttemptCount++;
+    }
+
+    public void RecordClueSolved(int clueIndex)
+    {
+        if (readClueIndices.Add(clueIndex))
+            cluesSolved++;
     }
 
     public void GameOver()
@@ -95,11 +112,30 @@ public class GameManager : MonoBehaviour
         currentState = GameState.GameOver;
         Time.timeScale = 0f;
 
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible   = true;
+
         var sendToGoogle = GetComponent<SendToGoogle>();
         if (sendToGoogle != null)
             sendToGoogle.Send();
 
-        UIManager.Instance.ShowGameOver();
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowGameOver();
+        }
+        if (GameLayout.Instance != null)
+            GameLayout.Instance.HideWrongFeedback();
+        var keyUI = KeyInventoryUI.Instance;
+        if (keyUI != null && keyUI.openPromptUI != null)
+            keyUI.openPromptUI.SetActive(false);
+
+        foreach (var lane3 in FindObjectsOfType<Lane3DoorInteraction>())
+        {
+            lane3.CloseInputPanel();
+            lane3.HidePrompt();
+        }
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible   = true;
     }
 
     // Restart the entire level (load the first lane scene)
@@ -115,7 +151,10 @@ public class GameManager : MonoBehaviour
         deathsToEnemy = 0;
         incorrectKeyCount = 0;
         incorrectCodeCount = 0;
+        keyAttemptCount = 0;
+        codeAttemptCount = 0;
         cluesSolved = 0;
+        readClueIndices.Clear();
 
         Time.timeScale = 1f;
 
@@ -148,10 +187,24 @@ public class GameManager : MonoBehaviour
         {
             levelCompleteTime = Time.unscaledTime - levelStartTime;
             Debug.Log("No more lanes. Level complete!");
+            Time.timeScale = 0f;
+            if (GameLayout.Instance != null)
+            {
+                GameLayout.Instance.HideWrongFeedback();
+                GameLayout.Instance.Refresh();
+            }
+            foreach (var lane3 in FindObjectsOfType<Lane3DoorInteraction>())
+            {
+                lane3.CloseInputPanel();
+                lane3.HidePrompt();
+            }
+             if (UIManager.Instance != null)
+                UIManager.Instance.ShowVictoryScreen();
 
             var sendToGoogle = GetComponent<SendToGoogle>();
             if (sendToGoogle != null)
                 sendToGoogle.Send();
+
         }
     }
 
@@ -172,6 +225,22 @@ public class GameManager : MonoBehaviour
         return lane;
     }
 
+    public int GetTotalCluesForCurrentLane()
+    {
+        string scene = SceneManager.GetActiveScene().name;
+        if (scene == "Level1-Lane2") return 2;
+        if (scene == "Level1-Lane3") return 3;
+        return 0;
+    }
+
+    public int GetMaxAttemptsForCurrentLane()
+    {
+        string scene = SceneManager.GetActiveScene().name;
+        if (scene == "Level1-Lane1") return 1;
+        // Tutorial has unlimited attempts – handled by TutorialKeyDeductionManager
+        return 2;
+    }
+
     void OnEnable()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
@@ -182,12 +251,41 @@ public class GameManager : MonoBehaviour
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
+    void EnsureSingleEventSystem()
+    {
+        var eventSystems = FindObjectsOfType<EventSystem>();
+        for (int i = 1; i < eventSystems.Length; i++)
+        {
+            Destroy(eventSystems[i].gameObject);
+        }
+    }
+
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // When restarting, show the start screen after the new scene loads
+
+        EnsureSingleEventSystem();
+
+        cluesSolved = 0;
+        readClueIndices.Clear();
+        incorrectKeyCount = 0;
+        incorrectCodeCount = 0;
+        keyAttemptCount = 0;
+        codeAttemptCount = 0;
+
+
         if (currentState == GameState.Start && UIManager.Instance != null)
         {
             UIManager.Instance.ShowStartScreen();
+        }
+        else if (currentState == GameState.Start)
+        {
+            currentState = GameState.Playing;
+            Time.timeScale = 1f;
+        }
+
+        else if (currentState == GameState.Playing && UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowLaneEntryTextForCurrentScene();
         }
 
         Time.timeScale = (currentState == GameState.Playing) ? 1f : 0f;

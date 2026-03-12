@@ -8,7 +8,6 @@ public class SafeZoneController : MonoBehaviour
         if (other.CompareTag("Player"))
         {
             InSafeZone = true;
-            Debug.Log("Player in SAfe Zone!");
         }
     }
     private void OnTriggerExit(Collider other)
@@ -16,7 +15,6 @@ public class SafeZoneController : MonoBehaviour
         if(other.CompareTag("Player"))
         {
             InSafeZone = false;
-            Debug.Log("Player Outside SafeZone");
         }
     }
 }

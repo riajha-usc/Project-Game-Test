@@ -21,7 +21,7 @@ public class PlayerMovement3D : MonoBehaviour
     public float hpBoost = 20f;
 
     [Header("PerkFields")]
-    public float pulsecost = 0.1f; // In % of hp
+    public float pulsecost = 0.05f; // In % of hp
     public GameObject pulsePrefab;
     public bool usePulse = false;
     public Slider pulseBar;
@@ -30,6 +30,7 @@ public class PlayerMovement3D : MonoBehaviour
     public float defaultPulse = 20f;
     private float playerPulse = 0f;
     public float pulseIncrement = 5f;
+    private bool isDead = false;
 
 
     void Start()
@@ -47,11 +48,11 @@ public class PlayerMovement3D : MonoBehaviour
             rb.freezeRotation = true;
         }
 
-        Renderer renderer = GetComponent<Renderer>();
-        if (renderer != null)
-        {
-            renderer.material.color = Color.yellow;
-        }
+        //Renderer renderer = GetComponent<Renderer>();
+        //if (renderer != null)
+        //{
+        //    renderer.material.color = Color.yellow;
+        //}
 
         maxHp = hp;
         playerPulse = defaultPulse;
@@ -66,7 +67,7 @@ public class PlayerMovement3D : MonoBehaviour
     {
         Die();
         PulseCalculator();
-        if (healthtxt != null) healthtxt.text = hp + " /" + maxHp;
+        if (healthtxt != null) healthtxt.text = Mathf.RoundToInt(hp) + " / " + Mathf.RoundToInt(maxHp);
         if (healthbar != null) healthbar.value = hp / maxHp;
         if (usePulse)
         {
@@ -107,7 +108,10 @@ public class PlayerMovement3D : MonoBehaviour
 
         velocity.y += gravity * Time.deltaTime;
 
-        controller.Move((move * speed + velocity) * Time.deltaTime);
+        if (controller != null && controller.enabled)
+        {
+            controller.Move((move * speed + velocity) * Time.deltaTime);
+        }
 
         // Rotate player toward movement direction
         if (move.sqrMagnitude > 0.01f)
@@ -115,33 +119,42 @@ public class PlayerMovement3D : MonoBehaviour
             Quaternion targetRotation = Quaternion.LookRotation(move);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Mathf.Clamp01(rotationSpeed * Time.deltaTime));
         }
-        if(GameManager.Instance.currentState == GameManager.GameState.Start)
+
+        if (GameManager.Instance != null &&
+            GameManager.Instance.currentState == GameManager.GameState.Start &&
+            GameManager.Instance.GetCurrentLaneNumber() != 3)
         {
             hp = maxHp;
-            // I want to reset the player gameobject in case of a restart here
+            isDead = false;
+            usePulse = false;
+            playerPulse = defaultPulse;
+            if (controller != null) controller.enabled = true;
+            if (pulseBar != null) pulseBar.gameObject.SetActive(usePulse);
+            if (pulseText != null) pulseText.gameObject.SetActive(usePulse);
         }
     }
     private void Die()
     {
-        if (hp <= 0f)
+        if (hp <= 0.001f && !isDead)
         {
+            isDead = true;
+
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.RecordDeathToEnemy();
                 GameManager.Instance.GameOver();
             }
-            UIManager.Instance.gameOverScreen.SetActive(true);
-            Debug.Log("Game Over!");
+
+            if (UIManager.Instance != null && UIManager.Instance.gameOverScreen != null)
+                UIManager.Instance.gameOverScreen.SetActive(true);
+
+            // Stop player movement but keep script active so restart logic can run
+            controller.enabled = false;
         }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.gameObject.tag == "Projectile")
-        {
-            ProjectileController pc = new();
-            hp = hp - pc.damage;
-        }
         if (other.CompareTag("HpBooster") && hp != maxHp)
         {
             hp = Mathf.Clamp(hp + hpBoost, 0f, maxHp);
@@ -151,7 +164,8 @@ public class PlayerMovement3D : MonoBehaviour
             ProjectileController pc = other.GetComponent<ProjectileController>();
             if (pc != null)
             {
-                hp -= pc.damage;
+                hp = Mathf.Max(0f, hp - pc.damage);
+                Destroy(other.gameObject);
             }
         }
         if(other.CompareTag("Pulser"))
@@ -178,7 +192,7 @@ public class PlayerMovement3D : MonoBehaviour
         {
             float chargePercent = playerPulse / maxPulse;
             pc.Initialize(chargePercent);
-            hp -= (pulsecost * hp);
+            hp = Mathf.Max(0f, hp - (pulsecost * hp));
         }
 
         playerPulse = 0f;

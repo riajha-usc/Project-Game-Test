@@ -6,32 +6,157 @@ using Random = UnityEngine.Random;
 
 public class KeyGenerator : MonoBehaviour
 {
+    public static KeyGenerator Instance { get; private set; }
     public Material keyMaterialTemplate;
     public Transform[] spawnPoints;
     public float overallScale = 0.4f;
     public float slantX = 18f;
     public float slantZ = 10f;
     public float rotateSpeed = 80f;
-    string currentScene;
+    public string currentScene;
+
+    readonly System.Collections.Generic.List<GameObject> _tutorialShapeLabels = new System.Collections.Generic.List<GameObject>();
+    readonly System.Collections.Generic.Dictionary<KeyHeadShape, GameObject> _tutorialLabelByShape =
+        new System.Collections.Generic.Dictionary<KeyHeadShape, GameObject>();
 
     [HideInInspector] public KeyHeadShape correctShape;
     [HideInInspector] public KeyColorType correctColor;
     [HideInInspector] public bool correctKeySpinning = true;
     [HideInInspector] public List<string> generatedClues = new List<string>();
 
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
     void Start()
     {
         Debug.Log("KeyGenerator Start");
         if (spawnPoints == null || spawnPoints.Length == 0) return;
 
-        currentScene = SceneManager.GetActiveScene().name;
-
-        Debug.Log("Current scene: " + currentScene);
-
-        if (currentScene == "Level1-Lane1")
+        if (currentScene == "Tutorial-1")
+            GenerateTutorial1();
+        else if (currentScene == "Level1-Lane1")
             GenerateLane1();
         else if (currentScene == "Level1-Lane2")
             GenerateLane2();
+    }
+
+    void GenerateTutorial1()
+    {
+        KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
+        KeyColorType color = KeyColorType.Yellow;
+        int count = Mathf.Min(spawnPoints.Length, shapes.Length);
+        Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
+        int teeth = 3;
+        for (int i = 0; i < count; i++)
+        {
+            if (spawnPoints[i] == null) continue;
+            CreateKeyObject(
+                $"Tutorial1_Key_{i}_{shapes[i]}",
+                spawnPoints[i].position,
+                keyRot,
+                shapes[i],
+                color,
+                teeth,
+                spinning: true);
+        }
+
+        // Show world-space shape labels above the tutorial keys
+        ShowTutorialShapeLabels(true);
+    }
+
+    void ShowTutorialShapeLabels(bool show)
+    {
+        if (show && _tutorialShapeLabels.Count == 0)
+            CreateTutorialShapeLabels();
+
+        foreach (var lbl in _tutorialShapeLabels)
+            if (lbl != null) lbl.SetActive(show);
+    }
+
+    void CreateTutorialShapeLabels()
+    {
+        KeyHeadShape[] shapes = (KeyHeadShape[])System.Enum.GetValues(typeof(KeyHeadShape));
+        int count = Mathf.Min(spawnPoints != null ? spawnPoints.Length : 0, shapes.Length);
+
+        Color labelColor = new Color(1f, 0.84f, 0f);
+
+        for (int i = 0; i < count; i++)
+        {
+            if (spawnPoints == null || i >= spawnPoints.Length || spawnPoints[i] == null)
+                continue;
+
+            Vector3 labelPos = spawnPoints[i].position + Vector3.up * 1.4f;
+
+            KeyHeadShape shape = shapes[i];
+            string shapeName = shape.ToString().ToUpperInvariant();
+
+            GameObject go = new GameObject($"TutorialShapeLabel_{shapeName}");
+            go.transform.position = labelPos;
+
+            Canvas c = go.AddComponent<Canvas>();
+            c.renderMode   = RenderMode.WorldSpace;
+            c.sortingOrder = 15;
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta  = new Vector2(160f, 40f);
+            rt.localScale = Vector3.one * 0.008f;
+
+            go.AddComponent<UnityEngine.UI.CanvasScaler>();
+
+            GameObject bg = new GameObject("BG");
+            bg.transform.SetParent(go.transform, false);
+            RectTransform bgRt = bg.AddComponent<RectTransform>();
+            bgRt.anchorMin = Vector2.zero;
+            bgRt.anchorMax = Vector2.one;
+            bgRt.offsetMin = Vector2.zero;
+            bgRt.offsetMax = Vector2.zero;
+            UnityEngine.UI.Image img = bg.AddComponent<UnityEngine.UI.Image>();
+            img.color = new Color(0.05f, 0.05f, 0.05f, 0.85f);
+
+            // Text
+            GameObject textGO = new GameObject("Label");
+            textGO.transform.SetParent(go.transform, false);
+            RectTransform tRt = textGO.AddComponent<RectTransform>();
+            tRt.anchorMin = Vector2.zero;
+            tRt.anchorMax = Vector2.one;
+            tRt.offsetMin = new Vector2(6f, 2f);
+            tRt.offsetMax = new Vector2(-6f, -2f);
+
+            TMPro.TextMeshProUGUI tmp = textGO.AddComponent<TMPro.TextMeshProUGUI>();
+            tmp.text      = shapeName;
+            tmp.fontSize  = 22;
+            tmp.color     = labelColor;
+            tmp.fontStyle = TMPro.FontStyles.Bold;
+            tmp.alignment = TMPro.TextAlignmentOptions.Center;
+
+            go.AddComponent<BillboardLabel>();
+
+            _tutorialShapeLabels.Add(go);
+            if (!_tutorialLabelByShape.ContainsKey(shape))
+                _tutorialLabelByShape.Add(shape, go);
+        }
+    }
+
+    public void OnTutorialKeyCollected(KeyHeadShape collectedShape)
+    {
+        if (currentScene != "Tutorial-1" || _tutorialLabelByShape.Count == 0)
+            return;
+
+        if (_tutorialLabelByShape.TryGetValue(collectedShape, out var label) && label != null)
+            label.SetActive(false);
     }
 
     void GenerateLane1()
@@ -138,6 +263,8 @@ public class KeyGenerator : MonoBehaviour
             GameManager.Instance.lane2CorrectColor = correctColor.ToString();
             GameManager.Instance.lane2CorrectKeySpinning = correctKeySpinning;
             GameManager.Instance.lane2Clues = new List<string>(generatedClues);
+            // Lane 3 door answer = lane1's color + lane2's shape
+            GameManager.Instance.finalAnswer = $"{GameManager.Instance.lane1CorrectColor} {GameManager.Instance.lane2CorrectShape}";
         }
     }
 

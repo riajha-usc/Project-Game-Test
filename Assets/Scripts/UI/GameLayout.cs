@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +13,7 @@ public class GameLayout : MonoBehaviour
     [Header("Optional: Assign in Editor to use existing UI")]
     public TMP_Text laneProgressText;
     public TMP_Text cluesProgressText;
+    public TMP_Text attemptsProgressText;
     public TMP_Text currentHintText;
 
     [Header("Auto-build UI if references are null")]
@@ -28,6 +30,8 @@ public class GameLayout : MonoBehaviour
     Vector2 hintBasePos;
     float updateInterval = 0.2f;
     float nextUpdate;
+    GameObject wrongKeyFeedbackObj;
+    Coroutine wrongKeyFeedbackCoroutine;
 
     void Awake()
     {
@@ -127,23 +131,23 @@ public class GameLayout : MonoBehaviour
 
         if (pulseBarRect != null)
         {
-            var pulseLabelObj = new GameObject("PulseBarLabel");
-            pulseLabelObj.transform.SetParent(transform, false);
-            var pulseLabelRect = pulseLabelObj.AddComponent<RectTransform>();
-            pulseLabelRect.anchorMin = new Vector2(0f, 1f);
-            pulseLabelRect.anchorMax = new Vector2(0f, 1f);
-            pulseLabelRect.pivot = new Vector2(0f, 1f);
-            pulseLabelRect.anchoredPosition = new Vector2(16, -70);
-            pulseLabelRect.sizeDelta = new Vector2(95, 35);
-            var pulseLabelTmp = pulseLabelObj.AddComponent<TextMeshProUGUI>();
-            pulseLabelTmp.text = "Pulse:";
-            pulseLabelTmp.fontSize = 25;
-            pulseLabelTmp.fontStyle = FontStyles.Bold;
-            pulseLabelTmp.color = Color.white;
-            pulseLabelTmp.alignment = TextAlignmentOptions.Left;
-            pulseLabelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-            if (TMP_Settings.defaultFontAsset != null)
-                pulseLabelTmp.font = TMP_Settings.defaultFontAsset;
+            //var pulseLabelObj = new GameObject("PulseBarLabel");
+            //pulseLabelObj.transform.SetParent(transform, false);
+            //var pulseLabelRect = pulseLabelObj.AddComponent<RectTransform>();
+            //pulseLabelRect.anchorMin = new Vector2(0f, 1f);
+            //pulseLabelRect.anchorMax = new Vector2(0f, 1f);
+            //pulseLabelRect.pivot = new Vector2(0f, 1f);
+            //pulseLabelRect.anchoredPosition = new Vector2(16, -70);
+            //pulseLabelRect.sizeDelta = new Vector2(95, 35);
+            //var pulseLabelTmp = pulseLabelObj.AddComponent<TextMeshProUGUI>();
+            //pulseLabelTmp.text = "Pulse:";
+            //pulseLabelTmp.fontSize = 25;
+            //pulseLabelTmp.fontStyle = FontStyles.Bold;
+            //pulseLabelTmp.color = Color.white;
+            //pulseLabelTmp.alignment = TextAlignmentOptions.Left;
+            //pulseLabelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+            //if (TMP_Settings.defaultFontAsset != null)
+            //    pulseLabelTmp.font = TMP_Settings.defaultFontAsset;
 
             pulseBarRect.SetParent(transform, false);
             pulseBarRect.anchorMin = new Vector2(0f, 1f);
@@ -156,6 +160,18 @@ public class GameLayout : MonoBehaviour
 
     void Update()
     {
+        ShowPulseBar();
+        if (GameManager.Instance != null && GameManager.Instance.currentState == GameManager.GameState.GameOver)
+        {
+            if (rootRect != null)
+                rootRect.gameObject.SetActive(false);
+            return;
+        }
+        else if (rootRect != null && !rootRect.gameObject.activeSelf)
+        {
+            rootRect.gameObject.SetActive(true);
+        }
+
         if (hintRect != null)
         {
             float t = Time.unscaledTime * floatSpeed;
@@ -167,6 +183,49 @@ public class GameLayout : MonoBehaviour
         Refresh();
     }
 
+    public void ShowPulseBar()
+    {
+        var player = GameObject.FindGameObjectWithTag("Player");
+        if (player == null) return;
+
+        var pm = player.GetComponent<PlayerMovement3D>();
+        if (pm == null || pm.pulseText == null) return;
+
+        bool canShowPulse = pm.usePulse && GameManager.Instance != null && GameManager.Instance.GetCurrentLaneNumber() == 3;
+
+        if (pm.pulseBar != null) pm.pulseBar.gameObject.SetActive(canShowPulse);
+        if (pm.pulseText != null) pm.pulseText.gameObject.SetActive(canShowPulse);
+
+        var existing = transform.Find("PulseBarLabel");
+
+        if (canShowPulse)
+        {
+            if (existing == null)
+            {
+                var pulseLabelObj = new GameObject("PulseBarLabel");
+                pulseLabelObj.transform.SetParent(transform, false);
+                var pulseLabelRect = pulseLabelObj.AddComponent<RectTransform>();
+                pulseLabelRect.anchorMin = new Vector2(0f, 1f);
+                pulseLabelRect.anchorMax = new Vector2(0f, 1f);
+                pulseLabelRect.pivot = new Vector2(0f, 1f);
+                pulseLabelRect.anchoredPosition = new Vector2(16, -70);
+                pulseLabelRect.sizeDelta = new Vector2(95, 35);
+                var pulseLabelTmp = pulseLabelObj.AddComponent<TextMeshProUGUI>();
+                pulseLabelTmp.text = "Pulse:";
+                pulseLabelTmp.fontSize = 25;
+                pulseLabelTmp.fontStyle = FontStyles.Bold;
+                pulseLabelTmp.color = Color.white;
+                pulseLabelTmp.alignment = TextAlignmentOptions.Left;
+                pulseLabelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+                if (TMP_Settings.defaultFontAsset != null)
+                    pulseLabelTmp.font = TMP_Settings.defaultFontAsset;
+            }
+        }
+        else if (existing != null)
+        {
+            Destroy(existing.gameObject);
+        }
+    }
     public void Refresh()
     {
         if (GameManager.Instance == null) return;
@@ -178,10 +237,112 @@ public class GameLayout : MonoBehaviour
             laneProgressText.text = $"Lanes: <color=#4A90D9>{currentLane}/{totalLanes}</color>";
 
         if (cluesProgressText != null)
-            cluesProgressText.text = "Clues: <color=#4A90D9>0/4</color>"; // Placeholder
+        {
+            int totalClues = GameManager.Instance.GetTotalCluesForCurrentLane();
+            int solved = GameManager.Instance.cluesSolved;
+            cluesProgressText.text = $"Clues: <color=#5B9BD5><b>{solved}/{totalClues}</b></color>";
+            var cluesContainer = cluesProgressText.transform.parent;
+            if (cluesContainer != null) cluesContainer.gameObject.SetActive(true);
+        }
+
+        if (attemptsProgressText != null)
+        {
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            int used = scene == "Level1-Lane3" ? GameManager.Instance.codeAttemptCount : GameManager.Instance.keyAttemptCount;
+            int max = GameManager.Instance.GetMaxAttemptsForCurrentLane();
+            attemptsProgressText.text = $"Unlock Attempts: <color=#5B9BD5><b>{used}/{max}</b></color>";
+        }
 
         if (currentHintText != null)
-            currentHintText.text = "\"HINT: Explore to find clues.\""; // Placeholder
+        {
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            if (scene == "Level1-Lane1")
+                currentHintText.text = "\"HINT: Observe the key. Lock it in memory - you'll need it later.\"";
+            else if (scene == "Level1-Lane2")
+                currentHintText.text = "\"HINT: Find clues. Deduce the right key - commit its features to memory.\"";
+            else
+                currentHintText.text = "\"HINT: green/blue/yellow/white + circle/square/capsule/cross\"";
+        }
+    }
+
+    public void ShowWrongKeyFeedback()
+    {
+        ShowWrongFeedback("Wrong key!");
+    }
+
+    public void ShowWrongCodeFeedback()
+    {
+        ShowWrongFeedback("Wrong code!");
+    }
+
+    public void HideWrongFeedback()
+    {
+        if (wrongKeyFeedbackCoroutine != null)
+        {
+            StopCoroutine(wrongKeyFeedbackCoroutine);
+            wrongKeyFeedbackCoroutine = null;
+        }
+        if (wrongKeyFeedbackObj != null)
+            wrongKeyFeedbackObj.SetActive(false);
+    }
+
+    void ShowWrongFeedback(string message)
+    {
+        if (wrongKeyFeedbackCoroutine != null)
+        {
+            StopCoroutine(wrongKeyFeedbackCoroutine);
+            wrongKeyFeedbackCoroutine = null;
+        }
+        EnsureWrongKeyFeedback();
+        if (wrongKeyFeedbackObj != null)
+        {
+            var tmp = wrongKeyFeedbackObj.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+            if (tmp != null) tmp.text = message;
+            wrongKeyFeedbackObj.SetActive(true);
+            wrongKeyFeedbackCoroutine = StartCoroutine(HideWrongKeyFeedbackAfter(2f));
+        }
+    }
+
+    void EnsureWrongKeyFeedback()
+    {
+        if (wrongKeyFeedbackObj != null) return;
+        var canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        wrongKeyFeedbackObj = new GameObject("WrongKeyFeedback");
+        wrongKeyFeedbackObj.transform.SetParent(canvas.transform, false);
+        var rect = wrongKeyFeedbackObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(400f, 80f);
+
+        var bg = wrongKeyFeedbackObj.AddComponent<UnityEngine.UI.Image>();
+        bg.color = new Color(0.9f, 0.2f, 0.2f, 0.85f);
+
+        var textGO = new GameObject("Text");
+        textGO.transform.SetParent(wrongKeyFeedbackObj.transform, false);
+        var textRect = textGO.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = textRect.offsetMax = Vector2.zero;
+        var tmp = textGO.AddComponent<TextMeshProUGUI>();
+        tmp.text = "Wrong key!";
+        tmp.fontSize = 32;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.color = Color.white;
+        tmp.alignment = TextAlignmentOptions.Center;
+
+        wrongKeyFeedbackObj.SetActive(false);
+    }
+
+    IEnumerator HideWrongKeyFeedbackAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        if (wrongKeyFeedbackObj != null)
+            wrongKeyFeedbackObj.SetActive(false);
+        wrongKeyFeedbackCoroutine = null;
     }
 
     void BuildHUDUI()
@@ -221,6 +382,19 @@ public class GameLayout : MonoBehaviour
         cluesProgressText.textWrappingMode = TextWrappingModes.NoWrap;
         AddLightBackground(cluesObj, 12);
 
+        var attemptsObj = new GameObject("AttemptsText");
+        attemptsObj.transform.SetParent(rootRect, false);
+        var attemptsRect = attemptsObj.AddComponent<RectTransform>();
+        attemptsRect.anchorMin = new Vector2(1f, 1f);
+        attemptsRect.anchorMax = new Vector2(1f, 1f);
+        attemptsRect.pivot = new Vector2(1f, 1f);
+        attemptsRect.anchoredPosition = new Vector2(-180, -16);
+        attemptsRect.sizeDelta = new Vector2(220, 38);
+        attemptsProgressText = CreateText(attemptsObj.transform, "Unlocked Attempts: 0", 25);
+        attemptsProgressText.alignment = TextAlignmentOptions.Center;
+        attemptsProgressText.textWrappingMode = TextWrappingModes.NoWrap;
+        AddLightBackground(attemptsObj, 12);
+
         // Hint - bottom left
         var hintObj = new GameObject("HintText");
         hintObj.transform.SetParent(rootRect, false);
@@ -229,7 +403,7 @@ public class GameLayout : MonoBehaviour
         hintRect.anchorMax = new Vector2(0f, 0f);
         hintRect.pivot = new Vector2(0f, 0f);
         hintRect.anchoredPosition = new Vector2(16, 16);
-        hintRect.sizeDelta = new Vector2(400, 40);
+        hintRect.sizeDelta = new Vector2(480, 70);
         this.hintRect = hintRect;
         hintBasePos = hintRect.anchoredPosition;
         currentHintText = CreateText(hintObj.transform, "\"Hint: Explore to find clues.\"", 30);

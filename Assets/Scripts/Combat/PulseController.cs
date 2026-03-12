@@ -15,12 +15,12 @@ public class PulseController : MonoBehaviour
     public float CurrentPulse { get; private set; }
     private float chargePercent;
 
-    private Renderer renderer;
+    private Renderer _renderer;
 
     void Start()
     {
-        renderer = GetComponent<Renderer>();
-        if(renderer == null)
+        _renderer = GetComponent<Renderer>();
+        if (_renderer == null)
         {
             Debug.LogError("PulseEffectController requires a Renderer component.");
             Destroy(gameObject);
@@ -63,9 +63,9 @@ public class PulseController : MonoBehaviour
                 }
             }
 
-            Color color = renderer.material.color;
+            Color color = _renderer.material.color;
             color.a = Mathf.Lerp(1f, 0f, timer * fadeSpeed);
-            renderer.material.color = color;
+            _renderer.material.color = color;
 
             yield return null;
         }

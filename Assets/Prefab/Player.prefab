@@ -182,7 +182,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.23529412, g: 0.7019608, b: 0.44313726, a: 1}
+  m_Color: {r: 0.08, g: 0.35, b: 0.12, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1854,8 +1854,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 0
-  m_Color: {r: 0.64705884, g: 0.16470589, b: 0.16470589, a: 1}
-  m_Intensity: 1000
+  m_Color: {r: 0.6862745, g: 0.9333334, b: 0.9333334, a: 1}
+  m_Intensity: 500
   m_Range: 200
   m_SpotAngle: 120
   m_InnerSpotAngle: 50
@@ -1952,12 +1952,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SpotlightSceneColor
   sceneColors:
   - sceneName: StrangerThings-Lane1
-    lightColor: {r: 0.65, g: 0.16, b: 0.16, a: 1}
+    lightColor: {r: 0.6862745, g: 0.9333334, b: 0.9333334, a: 1}
   - sceneName: StrangerThings-Lane2
     lightColor: {r: 0.65, g: 0.16, b: 0.16, a: 1}
   - sceneName: StrangerThings-Lane3
     lightColor: {r: 0.65, g: 0.16, b: 0.16, a: 1}
-  defaultColor: {r: 0.6509804, g: 0.16078432, b: 0.16078432, a: 1}
+  defaultColor: {r: 0.6862745, g: 0.9333334, b: 0.9333334, a: 1}
 --- !u!1 &7848331500488823941
 GameObject:
   m_ObjectHideFlags: 0
@@ -2160,6 +2160,7 @@ MonoBehaviour:
   healthtxt: {fileID: 1536655561259669423}
   maxHp: 0
   hpBoost: 20
+  pulsecost: 0.05
   pulsePrefab: {fileID: 451301236013028885, guid: 94aad5c2ff5d5bd4db00a9214407f71d, type: 3}
   usePulse: 1
   pulseBar: {fileID: 5194008604353920501}

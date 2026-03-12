@@ -433,7 +433,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyController
   player: {fileID: 7977876750130085339, guid: 8fb700af38a01b24a886000171918e42, type: 3}
   chaseRange: 6
-  stoppingDist: 2
+  stoppingDist: 4
   damageRange: 6
   enemyhealthbar: {fileID: 1475466006736850459}
   projectilePrefab: {fileID: 7329464817544572856, guid: d53dd36b3545cff43b2d38269439d2d8, type: 3}

@@ -9,6 +9,9 @@ public class LaneDoor : MonoBehaviour
             // UIManager.Instance.ShowInteractPrompt();
             if (KeyInventoryUI.Instance != null)
                 KeyInventoryUI.Instance.SetDoorInRange(true);
+
+            if (TutorialManager.Instance != null)
+                TutorialManager.Instance.OnPlayerReachedDoor();
         }
     }
 

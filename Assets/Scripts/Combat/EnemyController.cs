@@ -16,7 +16,7 @@ public class EnemyController : MonoBehaviour
     [SerializeField] public float damageRange = 4.0f;
 
     [Header("CombatParams")]
-    private float hp = 100f;
+    private float hp = 70f;
     private float maxHp = 0;
     public Slider enemyhealthbar;
     //public TMP_Text enemyhealthtxt;
@@ -38,12 +38,6 @@ public class EnemyController : MonoBehaviour
 
     void Start()
     {
-        Renderer renderer = gameObject.GetComponent<Renderer>();
-        if(renderer != null)
-        {
-            renderer.material.color = Color.violet;
-        }
-        Debug.Log("Enemy Renderer Not Found");
         InitializeAgent();
         SnapToNavMesh();
 
@@ -196,6 +190,7 @@ public class EnemyController : MonoBehaviour
             Quaternion lookRotation = Quaternion.LookRotation(direction);
 
             Instantiate(projectilePrefab, transform.position + new Vector3(0f, 0f, 0.5f), lookRotation);
+            new WaitForSeconds(2.0f);
         }
     }
 
