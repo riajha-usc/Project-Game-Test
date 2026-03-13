@@ -3,6 +3,7 @@ using TMPro;
 
 public class ClueBox : MonoBehaviour
 {
+    public event System.Action OnClueBoxOpened;
     public string clueText         = "";
     public int    clueIndex        = 0;
     public float  interactionRange = 4.0f;
@@ -122,6 +123,8 @@ public class ClueBox : MonoBehaviour
         currentlyOpenClue = this;
         HidePrompt();
 
+        OnClueBoxOpened?.Invoke();
+
         if (GameManager.Instance != null)
             GameManager.Instance.RecordClueSolved(clueIndex);
 
@@ -231,5 +234,10 @@ public class ClueBox : MonoBehaviour
     {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, interactionRange);
+    }
+
+    public void SetInteractable(bool value)
+    {
+        enabled = value;
     }
 }

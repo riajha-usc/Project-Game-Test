@@ -29,7 +29,16 @@ public class KeyItem : MonoBehaviour
     IEnumerator FlyToButton()
     {
         if (KeyInventory.Instance != null)
+        {
             KeyInventory.Instance.AddKey(shape, color, spinning);
+            ClueKeyStore.Instance.RegisterDisplayKey(new ClueKeyStore.ClueKeyDisplayData
+            {
+                keyID      = "K" + ((int)color + 1).ToString(),
+                colorLabel = color.ToString().ToUpper(),
+                accentColor = ToUnityColor(color),
+                keyIcon    = null
+            });  
+        }
 
         if (KeyGenerator.Instance != null)
             KeyGenerator.Instance.OnTutorialKeyCollected(shape);
