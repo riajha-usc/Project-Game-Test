@@ -87,6 +87,14 @@ public class KeyInventoryUI : MonoBehaviour
         return keyBarParent != null ? keyBarParent.GetComponent<RectTransform>() : null;
     }
 
+    // Returns the RectTransform of the key button at the given 0-based index (K1=0, K2=1, ...)
+    public RectTransform GetButtonAtIndex(int index)
+    {
+        if (index >= 0 && index < spawnedButtons.Count)
+            return spawnedButtons[index].GetComponent<RectTransform>();
+        return null;
+    }
+
     public void SetDoorInRange(bool inRange)
     {
         doorInRange = inRange;

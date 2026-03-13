@@ -43,10 +43,13 @@ public class TutorialManager : MonoBehaviour
     ArrowTarget _arrowTarget = ArrowTarget.None;
 
     RectTransform _keyBarRect;
+    RectTransform _keyButtonArrowTarget;
+    float _keyButtonArrowBob;
+    int _pendingKeyButtonIndex = -1;
 
     Transform _doorArrowTarget;
 
-    enum ArrowTarget { None, KeyBar, Door }
+    enum ArrowTarget { None, KeyBar, Door, KeyButton }
 
 
     void Awake()
@@ -120,8 +123,30 @@ public class TutorialManager : MonoBehaviour
         if (!_fourthKeyShown && _keysCollected >= 4)
         {
             _fourthKeyShown = true;
-            ShowPopup("All Keys Collected!\n Head to the door!", autoCloseDelay);
+            // ShowPopup("All Keys Collected!\n Head to the door!", autoCloseDelay);
+            StartCoroutine(ShowTutorialEndAfterFly());
         }
+    }
+
+    IEnumerator ShowTutorialEndAfterFly()
+    {
+        // Wait for the key fly animation to finish (0.6 s in KeyItem) plus a small buffer
+        yield return new WaitForSeconds(0.75f);
+
+        if (tutorialEndPanel != null)
+        {
+            tutorialEndPanel.SetActive(true);
+            Time.timeScale = 0f;
+        }
+    }
+
+    // Called by the Next button on the TutorialEnd canvas
+    public void OnTutorialEndNextPressed()
+    {
+        if (tutorialEndPanel != null)
+            tutorialEndPanel.SetActive(false);
+
+        Time.timeScale = 1f;
     }
 
 
@@ -191,7 +216,7 @@ public class TutorialManager : MonoBehaviour
         _arrowObject.transform.SetParent(_arrowCanvas.transform, false);
 
         RectTransform arrowRect = _arrowObject.AddComponent<RectTransform>();
-        arrowRect.sizeDelta = new Vector2(28f, 28f);
+        arrowRect.sizeDelta = new Vector2(40f, 40f);
 
         Image arrowImg = _arrowObject.AddComponent<Image>();
 
@@ -254,6 +279,36 @@ public class TutorialManager : MonoBehaviour
         {
             UpdateKeyBarArrow();
         }
+        else if (_arrowTarget == ArrowTarget.KeyButton)
+        {
+            UpdateKeyButtonArrow();
+        }
+    }
+
+    void UpdateKeyButtonArrow()
+    {
+        // Resolve the button rect if not yet cached
+        if (_keyButtonArrowTarget == null && _pendingKeyButtonIndex >= 0 && KeyInventoryUI.Instance != null)
+            _keyButtonArrowTarget = KeyInventoryUI.Instance.GetButtonAtIndex(_pendingKeyButtonIndex);
+
+        if (_keyButtonArrowTarget == null) return;
+
+        // Get the top-centre of the button in screen space
+        Vector3[] corners = new Vector3[4];
+        _keyButtonArrowTarget.GetWorldCorners(corners);
+        // corners: 0=BL, 1=TL, 2=TR, 3=BR
+        Vector2 buttonTopCentre = ((Vector2)(corners[1] + corners[2])) * 0.5f;
+
+        // Bob the arrow up and down above the button
+        _keyButtonArrowBob += Time.unscaledDeltaTime * 3f;
+        float bobOffset = Mathf.Sin(_keyButtonArrowBob) * 6f + 30f; // 18–30 px above button top
+
+        Vector2 arrowPos = buttonTopCentre + new Vector2(0f, bobOffset);
+
+        RectTransform arrowRect = _arrowObject.GetComponent<RectTransform>();
+        arrowRect.position = new Vector3(arrowPos.x, arrowPos.y, 0f);
+        // Point straight down (arrow sprite points UP by default, rotate 180° to point down)
+        _arrowObject.transform.rotation = Quaternion.Euler(0f, 0f, 180f);
     }
 
     void UpdateKeyBarArrow()
@@ -354,13 +409,24 @@ public class TutorialManager : MonoBehaviour
             HideArrow();
 
         ShowPopup("Press keys 1, 2, 3, 4\nto select key!", autoCloseDelay);
+        ShowArrowOnKeyButton(2);
     }
 
     // Called by KeyInventoryUI when player presses 1-4 at the door
     public void OnKeyUsedAtDoor()
     {
-        if (tutorialEndPanel != null)
-            tutorialEndPanel.SetActive(true);
+        // intentionally left empty — TutorialEnd panel is shown on 4th key collected
+    }
+
+    // Call this to point the arrow at a specific key button. index is 0-based (K1=0, K2=1, ...)
+    public void ShowArrowOnKeyButton(int index)
+    {
+        _keyButtonArrowTarget = null; // will be resolved in UpdateArrow once buttons exist
+        _keyButtonArrowBob = 0f;
+
+        // Store the index so UpdateArrow can look it up each frame (buttons may not exist yet)
+        _pendingKeyButtonIndex = index;
+        ShowArrow(ArrowTarget.KeyButton);
     }
 
     void ShowArrow(ArrowTarget target)
