@@ -11,27 +11,18 @@ public class GameLayout : MonoBehaviour
     public static GameLayout Instance { get; private set; }
 
     [Header("Optional: Assign in Editor to use existing UI")]
-    public TMP_Text laneProgressText;
     public TMP_Text cluesProgressText;
     public TMP_Text attemptsProgressText;
-    public TMP_Text currentHintText;
 
     [Header("Auto-build UI if references are null")]
     public bool buildUIAtRuntime = true;
 
-    [Header("Floating effect")]
-    [Tooltip("Vertical bobbing amount in pixels")]
-    public float floatAmplitude = 4f;
-    [Tooltip("Speed of the float animation")]
-    public float floatSpeed = 2f;
-
     RectTransform rootRect;
-    RectTransform hintRect;
-    Vector2 hintBasePos;
     float updateInterval = 0.2f;
     float nextUpdate;
     GameObject wrongKeyFeedbackObj;
     Coroutine wrongKeyFeedbackCoroutine;
+    GameObject controlsPanel;
 
     void Awake()
     {
@@ -43,124 +34,17 @@ public class GameLayout : MonoBehaviour
         Instance = this;
     }
 
-    void OnEnable()
-    {
-        SceneManager.sceneLoaded += OnSceneLoaded;
-        ReparentHealthBarToTopLeft();
-    }
-
-    void OnDisable()
-    {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-    }
-
     void Start()
     {
-        if (buildUIAtRuntime && laneProgressText == null)
+        if (buildUIAtRuntime)
             BuildHUDUI();
 
-        ReparentHealthBarToTopLeft();
+        // ReparentHealthBarToTopLeft();
         nextUpdate = Time.unscaledTime + updateInterval;
-    }
-
-    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        ReparentHealthBarToTopLeft();
-    }
-
-    void ReparentHealthBarToTopLeft()
-    {
-        var player = GameObject.FindGameObjectWithTag("Player");
-        if (player == null) return;
-
-        var pm = player.GetComponent<PlayerMovement3D>();
-        if (pm == null || pm.healthbar == null) return;
-
-        var healthBarRect = pm.healthbar.GetComponent<RectTransform>();
-        if (healthBarRect == null) return;
-
-        RectTransform pulseBarRect = null;
-        if (pm.pulseBar != null)
-            pulseBarRect = pm.pulseBar.GetComponent<RectTransform>();
-
-        if (pulseBarRect == null)
-        {
-            if (healthBarRect.parent == transform) return;
-        }
-        else
-        {
-            if (healthBarRect.parent == transform && pulseBarRect.parent == transform) return;
-        }
-
-        var toDestroy = new List<GameObject>();
-        foreach (Transform t in transform)
-        {
-            if (t.name == "HealthBarLabel" || t.name == "PulseBarLabel")
-                toDestroy.Add(t.gameObject);
-            else if (t.GetComponent<Slider>() != null && t != healthBarRect && t != pulseBarRect)
-                toDestroy.Add(t.gameObject);
-        }
-        foreach (var go in toDestroy)
-            Destroy(go);
-
-        // health bar (same line)
-        var labelObj = new GameObject("HealthBarLabel");
-        labelObj.transform.SetParent(transform, false);
-        var labelRect = labelObj.AddComponent<RectTransform>();
-        labelRect.anchorMin = new Vector2(0f, 1f);
-        labelRect.anchorMax = new Vector2(0f, 1f);
-        labelRect.pivot = new Vector2(0f, 1f);
-        labelRect.anchoredPosition = new Vector2(16, -16);
-        labelRect.sizeDelta = new Vector2(95, 35);
-        var labelTmp = labelObj.AddComponent<TextMeshProUGUI>();
-        labelTmp.text = "Health:";
-        labelTmp.fontSize = 25;
-        labelTmp.fontStyle = FontStyles.Bold;
-        labelTmp.color = Color.white;
-        labelTmp.alignment = TextAlignmentOptions.Left;
-        labelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-        if (TMP_Settings.defaultFontAsset != null)
-            labelTmp.font = TMP_Settings.defaultFontAsset;
-
-        healthBarRect.SetParent(transform, false);
-        healthBarRect.anchorMin = new Vector2(0f, 1f);
-        healthBarRect.anchorMax = new Vector2(0f, 1f);
-        healthBarRect.pivot = new Vector2(0f, 1f);
-        healthBarRect.anchoredPosition = new Vector2(16 + 95 + 8, -16);
-        healthBarRect.sizeDelta = new Vector2(200, 40);
-
-        if (pulseBarRect != null)
-        {
-            //var pulseLabelObj = new GameObject("PulseBarLabel");
-            //pulseLabelObj.transform.SetParent(transform, false);
-            //var pulseLabelRect = pulseLabelObj.AddComponent<RectTransform>();
-            //pulseLabelRect.anchorMin = new Vector2(0f, 1f);
-            //pulseLabelRect.anchorMax = new Vector2(0f, 1f);
-            //pulseLabelRect.pivot = new Vector2(0f, 1f);
-            //pulseLabelRect.anchoredPosition = new Vector2(16, -70);
-            //pulseLabelRect.sizeDelta = new Vector2(95, 35);
-            //var pulseLabelTmp = pulseLabelObj.AddComponent<TextMeshProUGUI>();
-            //pulseLabelTmp.text = "Pulse:";
-            //pulseLabelTmp.fontSize = 25;
-            //pulseLabelTmp.fontStyle = FontStyles.Bold;
-            //pulseLabelTmp.color = Color.white;
-            //pulseLabelTmp.alignment = TextAlignmentOptions.Left;
-            //pulseLabelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-            //if (TMP_Settings.defaultFontAsset != null)
-            //    pulseLabelTmp.font = TMP_Settings.defaultFontAsset;
-
-            pulseBarRect.SetParent(transform, false);
-            pulseBarRect.anchorMin = new Vector2(0f, 1f);
-            pulseBarRect.anchorMax = new Vector2(0f, 1f);
-            pulseBarRect.pivot = new Vector2(0f, 1f);
-            pulseBarRect.anchoredPosition = new Vector2(16 + 95 + 8, -70);
-            pulseBarRect.sizeDelta = new Vector2(200, 40);
-        }
     }
 
     void Update()
     {
-        ShowPulseBar();
         if (GameManager.Instance != null && GameManager.Instance.currentState == GameManager.GameState.GameOver)
         {
             if (rootRect != null)
@@ -172,69 +56,14 @@ public class GameLayout : MonoBehaviour
             rootRect.gameObject.SetActive(true);
         }
 
-        if (hintRect != null)
-        {
-            float t = Time.unscaledTime * floatSpeed;
-            hintRect.anchoredPosition = hintBasePos + new Vector2(0, Mathf.Sin(t) * floatAmplitude);
-        }
-
         if (Time.unscaledTime < nextUpdate) return;
         nextUpdate = Time.unscaledTime + updateInterval;
         Refresh();
     }
 
-    public void ShowPulseBar()
-    {
-        var player = GameObject.FindGameObjectWithTag("Player");
-        if (player == null) return;
-
-        var pm = player.GetComponent<PlayerMovement3D>();
-        if (pm == null || pm.pulseText == null) return;
-
-        bool canShowPulse = pm.usePulse && GameManager.Instance != null && GameManager.Instance.GetCurrentLaneNumber() == 3;
-
-        if (pm.pulseBar != null) pm.pulseBar.gameObject.SetActive(canShowPulse);
-        if (pm.pulseText != null) pm.pulseText.gameObject.SetActive(canShowPulse);
-
-        var existing = transform.Find("PulseBarLabel");
-
-        if (canShowPulse)
-        {
-            if (existing == null)
-            {
-                var pulseLabelObj = new GameObject("PulseBarLabel");
-                pulseLabelObj.transform.SetParent(transform, false);
-                var pulseLabelRect = pulseLabelObj.AddComponent<RectTransform>();
-                pulseLabelRect.anchorMin = new Vector2(0f, 1f);
-                pulseLabelRect.anchorMax = new Vector2(0f, 1f);
-                pulseLabelRect.pivot = new Vector2(0f, 1f);
-                pulseLabelRect.anchoredPosition = new Vector2(16, -70);
-                pulseLabelRect.sizeDelta = new Vector2(95, 35);
-                var pulseLabelTmp = pulseLabelObj.AddComponent<TextMeshProUGUI>();
-                pulseLabelTmp.text = "Pulse:";
-                pulseLabelTmp.fontSize = 25;
-                pulseLabelTmp.fontStyle = FontStyles.Bold;
-                pulseLabelTmp.color = Color.white;
-                pulseLabelTmp.alignment = TextAlignmentOptions.Left;
-                pulseLabelTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
-                if (TMP_Settings.defaultFontAsset != null)
-                    pulseLabelTmp.font = TMP_Settings.defaultFontAsset;
-            }
-        }
-        else if (existing != null)
-        {
-            Destroy(existing.gameObject);
-        }
-    }
     public void Refresh()
     {
         if (GameManager.Instance == null) return;
-
-        int currentLane = GameManager.Instance.GetCurrentLaneNumber();
-        int totalLanes = GameManager.Instance.totalLanes;
-
-        if (laneProgressText != null)
-            laneProgressText.text = $"Lanes: <color=#4A90D9>{currentLane}/{totalLanes}</color>";
 
         if (cluesProgressText != null)
         {
@@ -253,16 +82,6 @@ public class GameLayout : MonoBehaviour
             attemptsProgressText.text = $"Unlock Attempts: <color=#5B9BD5><b>{used}/{max}</b></color>";
         }
 
-        if (currentHintText != null)
-        {
-            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-            if (scene == "Level1-Lane1")
-                currentHintText.text = "\"HINT: Observe the key. Lock it in memory - you'll need it later.\"";
-            else if (scene == "Level1-Lane2")
-                currentHintText.text = "\"HINT: Find clues. Deduce the right key - commit its features to memory.\"";
-            else
-                currentHintText.text = "\"HINT: green/blue/yellow/white + circle/square/capsule/cross\"";
-        }
     }
 
     public void ShowWrongKeyFeedback()
@@ -355,19 +174,6 @@ public class GameLayout : MonoBehaviour
             if (canvas == null) return;
         }
 
-        // Lane
-        var laneObj = new GameObject("LaneText");
-        laneObj.transform.SetParent(rootRect, false);
-        var laneRect = laneObj.AddComponent<RectTransform>();
-        laneRect.anchorMin = new Vector2(0.5f, 1f);
-        laneRect.anchorMax = new Vector2(0.5f, 1f);
-        laneRect.pivot = new Vector2(0.5f, 1f);
-        laneRect.anchoredPosition = new Vector2(0, -16);
-        laneRect.sizeDelta = new Vector2(140, 38);
-        laneProgressText = CreateText(laneObj.transform, "Lane 1/3", 25);
-        laneProgressText.alignment = TextAlignmentOptions.Center;
-        AddLightBackground(laneObj, 12);
-
         // Clues 
         var cluesObj = new GameObject("CluesText");
         cluesObj.transform.SetParent(rootRect, false);
@@ -395,22 +201,58 @@ public class GameLayout : MonoBehaviour
         attemptsProgressText.textWrappingMode = TextWrappingModes.NoWrap;
         AddLightBackground(attemptsObj, 12);
 
-        // Hint - bottom left
-        var hintObj = new GameObject("HintText");
-        hintObj.transform.SetParent(rootRect, false);
-        var hintRect = hintObj.AddComponent<RectTransform>();
-        hintRect.anchorMin = new Vector2(0f, 0f);
-        hintRect.anchorMax = new Vector2(0f, 0f);
-        hintRect.pivot = new Vector2(0f, 0f);
-        hintRect.anchoredPosition = new Vector2(16, 16);
-        hintRect.sizeDelta = new Vector2(480, 70);
-        this.hintRect = hintRect;
-        hintBasePos = hintRect.anchoredPosition;
-        currentHintText = CreateText(hintObj.transform, "\"Hint: Explore to find clues.\"", 30);
-        currentHintText.color = Color.white;
-        currentHintText.alignment = TextAlignmentOptions.BottomLeft;
-
+        BuildControlsPanel();
         Refresh();
+    }
+
+    void BuildControlsPanel()
+    {
+        // Top-left controls hint panel
+        controlsPanel = new GameObject("ControlsPanel");
+        controlsPanel.transform.SetParent(rootRect, false);
+
+        var panelRect = controlsPanel.AddComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0f, 1f);
+        panelRect.anchorMax = new Vector2(0f, 1f);
+        panelRect.pivot     = new Vector2(0f, 1f);
+        panelRect.anchoredPosition = new Vector2(16f, -16f);
+        panelRect.sizeDelta = new Vector2(270f, 70f);
+
+        AddLightBackground(controlsPanel, 14);
+
+        // Line 1 — Movement
+        var line1 = new GameObject("ControlsLine1");
+        line1.transform.SetParent(controlsPanel.transform, false);
+        var r1 = line1.AddComponent<RectTransform>();
+        r1.anchorMin = new Vector2(0f, 0.5f);
+        r1.anchorMax = new Vector2(1f, 1f);
+        r1.offsetMin = new Vector2(8f, 0f);
+        r1.offsetMax = new Vector2(-8f, 0f);
+        var t1 = line1.AddComponent<TextMeshProUGUI>();
+        t1.text = "<color=#AAAAAA>Move:</color>  <b>W A D</b>";
+        t1.fontSize = 20;
+        t1.color = Color.white;
+        t1.alignment = TextAlignmentOptions.Left;
+        t1.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            t1.font = TMP_Settings.defaultFontAsset;
+
+        // Line 2 — Key selection
+        var line2 = new GameObject("ControlsLine2");
+        line2.transform.SetParent(controlsPanel.transform, false);
+        var r2 = line2.AddComponent<RectTransform>();
+        r2.anchorMin = new Vector2(0f, 0f);
+        r2.anchorMax = new Vector2(1f, 0.5f);
+        r2.offsetMin = new Vector2(8f, 0f);
+        r2.offsetMax = new Vector2(-8f, 0f);
+        var t2 = line2.AddComponent<TextMeshProUGUI>();
+        t2.text = "<color=#AAAAAA>Select Key:</color>  <b>Mouse Click</b>";
+        t2.fontSize = 20;
+        t2.color = Color.white;
+        t2.alignment = TextAlignmentOptions.Left;
+        t2.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            t2.font = TMP_Settings.defaultFontAsset;
     }
 
     static Sprite roundedSprite;

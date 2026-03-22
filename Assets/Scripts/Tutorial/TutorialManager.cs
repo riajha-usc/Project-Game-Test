@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-
+using UnityEngine.SceneManagement;
 
 public class TutorialManager : MonoBehaviour
 {
@@ -16,29 +16,40 @@ public class TutorialManager : MonoBehaviour
     [Tooltip("The intro canvas panel (Image + MainText + StartButton). Shown on load, hidden on start.")]
     public GameObject introPanel;
 
-    [Tooltip("TutorialEnd canvas panel — shown when player presses 1-4 at the door.")]
-    public GameObject tutorialEndPanel;
+    public GameObject startMenu;
+
+    [Tooltip("Key TutorialEnd canvas panel — shown when player completes the key collection part of the tutorial.")]
+    public GameObject keyTutorialEnd;
+
+    [Tooltip("Clue TutorialEnd canvas panel — shown when the correct key is used at the door.")]
+    public GameObject clueTutorialEnd;
 
     [Header("Popup Settings")]
-    public float autoCloseDelay = 3f;       
-    public float proximityRadius = 2f;
+    public float autoCloseDelay = 3f;
 
     bool _nearKeyShown;
     bool _collectedShown;
     bool _fourthKeyShown;
     bool _gameStarted;
+    bool _atDoor;
+    bool _trapTutorialEndShown;
+    const float TRAP_DOOR_TRIGGER_DIST = 2f;
 
     int _keysCollected;
+    public string tutorialType = "keys";
 
     GameObject _popupRoot;
-    TMP_Text   _popupText;
-    Coroutine  _autoCloseCoroutine;
+    TMP_Text _popupText;
+    Coroutine _autoCloseCoroutine;
 
     GameObject _arrowCanvas;
     GameObject _arrowObject;
+    Image _arrowImg;
     GameObject _arrowLineRoot;
     List<RectTransform> _arrowLineDashes = new List<RectTransform>();
-    const int ARROW_LINE_DASH_COUNT = 48;
+    List<Image> _arrowLineDashImages = new List<Image>();
+    List<Image> _arrowLineShadows = new List<Image>();
+    const int ARROW_LINE_DASH_COUNT = 36;
     const float ARROW_ENDPOINT_PADDING = 80f;
     ArrowTarget _arrowTarget = ArrowTarget.None;
 
@@ -46,11 +57,14 @@ public class TutorialManager : MonoBehaviour
     RectTransform _keyButtonArrowTarget;
     float _keyButtonArrowBob;
     int _pendingKeyButtonIndex = -1;
+    Coroutine _showDoorArrowsCoroutine;
+    bool _doorUiShownWhenEnabled;
 
-    Transform _doorArrowTarget;
+    enum ArrowTarget { None, KeyBar, Door, KeyButton, Clue }
 
-    enum ArrowTarget { None, KeyBar, Door, KeyButton }
-
+    bool _clueOpened;
+    GameObject _clueBoxGO;
+    ClueBox _clueBox;
 
     void Awake()
     {
@@ -69,15 +83,19 @@ public class TutorialManager : MonoBehaviour
             if (doorGO != null) doorTransform = doorGO.transform;
         }
 
-        // Freeze game and show intro panel on scene load
-        Time.timeScale = 0f;
         if (introPanel != null)
+        {
+            Time.timeScale = 0f;
             introPanel.SetActive(true);
+        }
+        else
+        {
+            OnStartPressed();
+        }
     }
 
     void Update()
     {
-        // While intro is showing, only listen for Space to start
         if (!_gameStarted)
         {
             if (Input.GetKeyDown(KeyCode.Space))
@@ -86,9 +104,51 @@ public class TutorialManager : MonoBehaviour
         }
 
         UpdateArrow();
+
+        if (tutorialType == "traps" && !_trapTutorialEndShown && doorTransform != null)
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null && Vector3.Distance(player.transform.position, doorTransform.position) <= TRAP_DOOR_TRIGGER_DIST)
+            {
+                _trapTutorialEndShown = true;
+                ShowTrapTutorialEnd();
+            }
+        }
+
+        if (_atDoor)
+        {
+            bool buttonsEnabled = KeyInventoryUI.Instance != null && KeyInventoryUI.Instance.KeyButtonsInteractable;
+            if (buttonsEnabled)
+            {
+                if (!_doorUiShownWhenEnabled)
+                {
+                    _doorUiShownWhenEnabled = true;
+                    ShowPopup("Click the button to select key.", 0f);
+                    if (_showDoorArrowsCoroutine != null) StopCoroutine(_showDoorArrowsCoroutine);
+                    _showDoorArrowsCoroutine = StartCoroutine(ShowDoorArrows());
+                }
+            }
+            else
+            {
+                _doorUiShownWhenEnabled = false;
+                if (_showDoorArrowsCoroutine != null)
+                {
+                    StopCoroutine(_showDoorArrowsCoroutine);
+                    _showDoorArrowsCoroutine = null;
+                }
+                HideTutorialPopup();
+                HideTutorialArrow();
+                if (KeyInventoryUI.Instance != null) KeyInventoryUI.Instance.ClearHighlight();
+            }
+        }
+
+        if (_atDoor && Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            _atDoor = false;
+            OnCorrectKeyUsedAtDoor();
+        }
     }
 
-    // Called by StartButton OnClick or Space bar
     public void OnStartPressed()
     {
         if (_gameStarted) return;
@@ -96,6 +156,8 @@ public class TutorialManager : MonoBehaviour
 
         if (introPanel != null)
             introPanel.SetActive(false);
+        if (startMenu != null)
+            startMenu.SetActive(false);
 
         Time.timeScale = 1f;
 
@@ -105,7 +167,10 @@ public class TutorialManager : MonoBehaviour
         if (!_nearKeyShown)
         {
             _nearKeyShown = true;
-            ShowPopup("Observe key shapes\n pass through, to collect.", 5f);
+            if (tutorialType == "keys")
+                ShowPopup("Observe key shapes\n pass through, to collect.", 5f);
+            if (tutorialType == "traps")
+                ShowPopup("Analyze the traps, Assess your movements, and proceed carefully", 3.5f);
         }
     }
 
@@ -123,32 +188,99 @@ public class TutorialManager : MonoBehaviour
         if (!_fourthKeyShown && _keysCollected >= 4)
         {
             _fourthKeyShown = true;
-            // ShowPopup("All Keys Collected!\n Head to the door!", autoCloseDelay);
             StartCoroutine(ShowTutorialEndAfterFly());
         }
     }
 
     IEnumerator ShowTutorialEndAfterFly()
     {
-        // Wait for the key fly animation to finish (0.6 s in KeyItem) plus a small buffer
         yield return new WaitForSeconds(0.75f);
 
-        if (tutorialEndPanel != null)
+        if (keyTutorialEnd != null)
         {
-            tutorialEndPanel.SetActive(true);
+            keyTutorialEnd.SetActive(true);
             Time.timeScale = 0f;
         }
     }
 
-    // Called by the Next button on the TutorialEnd canvas
     public void OnTutorialEndNextPressed()
     {
-        if (tutorialEndPanel != null)
-            tutorialEndPanel.SetActive(false);
+        if (keyTutorialEnd != null)
+            keyTutorialEnd.SetActive(false);
 
         Time.timeScale = 1f;
+        StartCoroutine(Phase2Sequence());
     }
 
+    IEnumerator Phase2Sequence()
+    {
+        SpawnClueBox();
+        ShowPopup("Walk to the clue on the wall.", 0f);
+        ShowArrow(ArrowTarget.Clue);
+
+        yield return WaitUntilNearClue(2.5f);
+
+        HideTutorialPopup();
+        HideTutorialArrow();
+
+        yield return new WaitUntil(() => _clueOpened);
+
+        HideTutorialPopup();
+        yield return new WaitForSeconds(0.5f);
+
+        ShowPopup("Note the key whose shape\nmatches the clue description!", 5f);
+        int correctIdx = GetCorrectKeyButtonIndex();
+        if (correctIdx >= 0) ShowArrowOnKeyButton(correctIdx);
+        yield return new WaitForSecondsRealtime(5.5f);
+        HideTutorialArrow();
+    }
+
+    void SpawnClueBox()
+    {
+        ClueBoxGenerator gen = new GameObject("_TutClueGen").AddComponent<ClueBoxGenerator>();
+        gen.boxWidth = 0.7f;
+        gen.boxHeight = 0.6f;
+        _clueBoxGO = gen.CreateClueBox(
+            "TutorialClueBox",
+            new Vector3(1.82f, 2.05f, 33.7f),
+            Quaternion.identity,
+            "Perfect balance: <color=#079D68><b>four equal sides</b></color> forming harmony.",
+            0);
+        Destroy(gen.gameObject);
+        _clueBox = _clueBoxGO.GetComponent<ClueBox>();
+        _clueBox.OnClueOpenedEvent += () => _clueOpened = true;
+    }
+
+    IEnumerator WaitUntilNearClue(float threshold)
+    {
+        Transform player = null;
+        while (player == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) player = p.transform;
+            yield return null;
+        }
+        while (_clueBoxGO != null)
+        {
+            if (Vector3.Distance(player.position, _clueBoxGO.transform.position) <= threshold)
+                yield break;
+            yield return null;
+        }
+    }
+
+
+    public void HideTutorialPopup()
+    {
+        if (_popupRoot != null) _popupRoot.SetActive(false);
+        if (_autoCloseCoroutine != null)
+        {
+            StopCoroutine(_autoCloseCoroutine);
+            _autoCloseCoroutine = null;
+        }
+    }
+
+    public void ShowKeyBarArrow() => ShowArrow(ArrowTarget.KeyBar);
+    public void HideTutorialArrow() => HideArrow();
 
     void BuildPopupUI()
     {
@@ -192,14 +324,13 @@ public class TutorialManager : MonoBehaviour
             _popupText.color = Color.white;
             _popupText.fontStyle = FontStyles.Bold;
             _popupText.alignment = TextAlignmentOptions.Center;
-            _popupText.enableWordWrapping = true;
+            _popupText.textWrappingMode = TextWrappingModes.Normal;
             if (TMP_Settings.defaultFontAsset != null)
                 _popupText.font = TMP_Settings.defaultFontAsset;
         }
 
         _popupRoot.SetActive(false);
     }
-
 
     void BuildArrowUI()
     {
@@ -216,25 +347,34 @@ public class TutorialManager : MonoBehaviour
         _arrowObject.transform.SetParent(_arrowCanvas.transform, false);
 
         RectTransform arrowRect = _arrowObject.AddComponent<RectTransform>();
-        arrowRect.sizeDelta = new Vector2(40f, 40f);
+        arrowRect.sizeDelta = new Vector2(50f, 50f);
 
-        Image arrowImg = _arrowObject.AddComponent<Image>();
-
-        arrowImg.sprite = BuildArrowSprite();
-        arrowImg.color = Color.white;
+        _arrowImg = _arrowObject.AddComponent<Image>();
+        _arrowImg.sprite = BuildArrowSprite();
+        _arrowImg.color = Color.white;
 
         _arrowLineRoot = new GameObject("ArrowLine");
         _arrowLineRoot.transform.SetParent(_arrowCanvas.transform, false);
         for (int i = 0; i < ARROW_LINE_DASH_COUNT; i++)
         {
+            var shadowGO = new GameObject("DashShadow");
+            shadowGO.transform.SetParent(_arrowLineRoot.transform, false);
+            var shadowRect = shadowGO.AddComponent<RectTransform>();
+            shadowRect.sizeDelta = new Vector2(18f, 5f);
+            shadowRect.pivot = new Vector2(0.5f, 0.5f);
+            var shadowImg = shadowGO.AddComponent<Image>();
+            shadowImg.color = new Color(0f, 0f, 0f, 0f);
+            _arrowLineShadows.Add(shadowImg);
+
             var dashGO = new GameObject("Dash");
             dashGO.transform.SetParent(_arrowLineRoot.transform, false);
             var dashRect = dashGO.AddComponent<RectTransform>();
-            dashRect.sizeDelta = new Vector2(12f, 2f);
+            dashRect.sizeDelta = new Vector2(16f, 4f);
             dashRect.pivot = new Vector2(0.5f, 0.5f);
             var dashImg = dashGO.AddComponent<Image>();
             dashImg.color = Color.white;
             _arrowLineDashes.Add(dashRect);
+            _arrowLineDashImages.Add(dashImg);
         }
 
         _arrowCanvas.SetActive(false);
@@ -253,13 +393,11 @@ public class TutorialManager : MonoBehaviour
         {
             for (int x = 0; x < S; x++)
             {
-                // Normalised coords [-1,1]
                 float nx = (x + 0.5f) / S * 2f - 1f;
                 float ny = (y + 0.5f) / S * 2f - 1f;
 
-                // Arrow pointing UP: triangle top + rectangle stem
                 bool inTriangle = ny > 0.1f && Mathf.Abs(nx) < (0.6f - ny * 0.6f);
-                bool inStem     = ny >= -0.75f && ny <= 0.1f && Mathf.Abs(nx) < 0.13f;
+                bool inStem = ny >= -0.75f && ny <= 0.1f && Mathf.Abs(nx) < 0.13f;
 
                 tex.SetPixel(x, y, (inTriangle || inStem) ? white : clear);
             }
@@ -273,46 +411,105 @@ public class TutorialManager : MonoBehaviour
         if (_arrowTarget == ArrowTarget.None || !_arrowCanvas.activeSelf) return;
 
         if (_arrowLineRoot != null)
-            _arrowLineRoot.SetActive(_arrowTarget == ArrowTarget.KeyBar);
+            _arrowLineRoot.SetActive(_arrowTarget == ArrowTarget.KeyBar || _arrowTarget == ArrowTarget.Clue);
 
         if (_arrowTarget == ArrowTarget.KeyBar)
-        {
             UpdateKeyBarArrow();
-        }
         else if (_arrowTarget == ArrowTarget.KeyButton)
-        {
             UpdateKeyButtonArrow();
-        }
+        else if (_arrowTarget == ArrowTarget.Clue)
+            UpdateClueArrow();
     }
 
     void UpdateKeyButtonArrow()
     {
-        // Resolve the button rect if not yet cached
         if (_keyButtonArrowTarget == null && _pendingKeyButtonIndex >= 0 && KeyInventoryUI.Instance != null)
             _keyButtonArrowTarget = KeyInventoryUI.Instance.GetButtonAtIndex(_pendingKeyButtonIndex);
 
         if (_keyButtonArrowTarget == null) return;
 
-        // Get the top-centre of the button in screen space
         Vector3[] corners = new Vector3[4];
         _keyButtonArrowTarget.GetWorldCorners(corners);
-        // corners: 0=BL, 1=TL, 2=TR, 3=BR
         Vector2 buttonTopCentre = ((Vector2)(corners[1] + corners[2])) * 0.5f;
 
-        // Bob the arrow up and down above the button
         _keyButtonArrowBob += Time.unscaledDeltaTime * 3f;
-        float bobOffset = Mathf.Sin(_keyButtonArrowBob) * 6f + 30f; // 18–30 px above button top
+        float bobOffset = Mathf.Sin(_keyButtonArrowBob) * 6f + 30f;
 
         Vector2 arrowPos = buttonTopCentre + new Vector2(0f, bobOffset);
 
         RectTransform arrowRect = _arrowObject.GetComponent<RectTransform>();
         arrowRect.position = new Vector3(arrowPos.x, arrowPos.y, 0f);
-        // Point straight down (arrow sprite points UP by default, rotate 180° to point down)
         _arrowObject.transform.rotation = Quaternion.Euler(0f, 0f, 180f);
+    }
+
+    void UpdateClueArrow()
+    {
+        if (_clueBoxGO == null || Camera.main == null) return;
+
+        Vector3 clueScreenRaw = Camera.main.WorldToScreenPoint(_clueBoxGO.transform.position);
+        if (clueScreenRaw.z < 0f) clueScreenRaw = -clueScreenRaw;
+
+        float margin = 100f;
+        Vector2 clueScreen = new Vector2(
+            Mathf.Clamp(clueScreenRaw.x, margin, Screen.width - margin),
+            Mathf.Clamp(clueScreenRaw.y, margin, Screen.height - margin));
+
+        Vector2 lineStart = new Vector2(Screen.width * 0.5f, Screen.height * 0.35f);
+        Vector2 lineEnd = clueScreen;
+
+        Vector2 dir = lineEnd - lineStart;
+        float length = dir.magnitude;
+        if (length < 1f) return;
+        dir /= length;
+
+        float pad = Mathf.Min(ARROW_ENDPOINT_PADDING, length * 0.35f);
+        Vector2 startPadded = lineStart + dir * pad;
+        Vector2 endPadded = lineEnd - dir * pad;
+
+        float march = (Time.time * 0.8f) % 1f;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+        for (int i = 0; i < _arrowLineDashes.Count; i++)
+        {
+            float t = ((i + march) / _arrowLineDashes.Count) % 1f;
+            float alpha = Mathf.Lerp(0.12f, 1.0f, t);
+
+            Vector2 pos = Vector2.Lerp(startPadded, endPadded, t);
+
+            var dash = _arrowLineDashes[i];
+            dash.gameObject.SetActive(true);
+            dash.position = new Vector3(pos.x, pos.y, 0f);
+            dash.rotation = Quaternion.Euler(0f, 0f, angle);
+            dash.sizeDelta = new Vector2(16f, 4f);
+            if (i < _arrowLineDashImages.Count)
+                _arrowLineDashImages[i].color = new Color(1f, 1f, 1f, alpha);
+
+            if (i < _arrowLineShadows.Count)
+            {
+                var shadow = _arrowLineShadows[i];
+                shadow.GetComponent<RectTransform>().position = new Vector3(pos.x + 1.5f, pos.y - 1.5f, 0f);
+                shadow.GetComponent<RectTransform>().rotation = Quaternion.Euler(0f, 0f, angle);
+                shadow.GetComponent<RectTransform>().sizeDelta = new Vector2(18f, 5f);
+                shadow.color = new Color(0f, 0f, 0f, alpha * 0.35f);
+            }
+        }
+
+        float finalAngle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+        RectTransform arrowRect = _arrowObject.GetComponent<RectTransform>();
+        arrowRect.position = new Vector3(endPadded.x, endPadded.y, 0f);
+        _arrowObject.transform.rotation = Quaternion.Euler(0f, 0f, finalAngle - 90f);
+        if (_arrowImg != null) _arrowImg.color = Color.white;
     }
 
     void UpdateKeyBarArrow()
     {
+        for (int i = 0; i < _arrowLineDashImages.Count; i++)
+            if (_arrowLineDashImages[i] != null)
+                _arrowLineDashImages[i].color = Color.white;
+        for (int i = 0; i < _arrowLineShadows.Count; i++)
+            if (_arrowLineShadows[i] != null)
+                _arrowLineShadows[i].color = new Color(0f, 0f, 0f, 0f);
+
         if (_keyBarRect == null && KeyInventoryUI.Instance != null)
         {
             var flyTarget = KeyInventoryUI.Instance.GetFlyTarget();
@@ -346,7 +543,7 @@ public class TutorialManager : MonoBehaviour
         float length = dir.magnitude;
         if (length < 1f) length = 1f;
         dir /= length;
-        // Inset both ends so the arrow doesn't touch the popup or key bar
+
         float pad = Mathf.Min(ARROW_ENDPOINT_PADDING, length * 0.4f);
         Vector2 startPadded = lineStart + dir * pad;
         Vector2 endPadded = lineEnd - dir * pad;
@@ -360,10 +557,13 @@ public class TutorialManager : MonoBehaviour
         float endAngle = 0f;
         for (int i = 0; i < _arrowLineDashes.Count; i++)
         {
-            float t = (i + 1) / (float)(ARROW_LINE_DASH_COUNT + 1);
+            float t = (i + 1) / (float)(_arrowLineDashes.Count + 1);
             float oneMinusT = 1f - t;
-            Vector2 pos = oneMinusT * oneMinusT * startPadded + 2f * oneMinusT * t * control + t * t * endPadded;
-            Vector2 tangent = 2f * oneMinusT * (control - startPadded) + 2f * t * (endPadded - control);
+            Vector2 pos = oneMinusT * oneMinusT * startPadded
+                            + 2f * oneMinusT * t * control
+                            + t * t * endPadded;
+            Vector2 tangent = 2f * oneMinusT * (control - startPadded)
+                            + 2f * t * (endPadded - control);
             if (tangent.sqrMagnitude < 0.01f) tangent = endPadded - startPadded;
             float angle = Mathf.Atan2(tangent.y, tangent.x) * Mathf.Rad2Deg;
             if (i == _arrowLineDashes.Count - 1) endAngle = angle;
@@ -381,8 +581,7 @@ public class TutorialManager : MonoBehaviour
         _arrowObject.transform.rotation = Quaternion.Euler(0f, 0f, endAngle - 90f);
     }
 
-
-    void ShowPopup(string message, float duration)
+    public void ShowPopup(string message, float duration)
     {
         if (_autoCloseCoroutine != null)
             StopCoroutine(_autoCloseCoroutine);
@@ -390,7 +589,9 @@ public class TutorialManager : MonoBehaviour
         if (_popupText != null)
             _popupText.text = message;
         _popupRoot.SetActive(true);
-        _autoCloseCoroutine = StartCoroutine(AutoClosePopup(duration));
+
+        if (duration > 0f)
+            _autoCloseCoroutine = StartCoroutine(AutoClosePopup(duration));
     }
 
     IEnumerator AutoClosePopup(float delay)
@@ -408,23 +609,61 @@ public class TutorialManager : MonoBehaviour
         if (_arrowTarget == ArrowTarget.Door)
             HideArrow();
 
-        ShowPopup("Press keys 1, 2, 3, 4\nto select key!", autoCloseDelay);
-        ShowArrowOnKeyButton(2);
+        _atDoor = true;
     }
 
-    // Called by KeyInventoryUI when player presses 1-4 at the door
+    IEnumerator ShowDoorArrows()
+    {
+        ShowArrow(ArrowTarget.KeyBar);
+        yield return new WaitForSecondsRealtime(2f);
+        int correctIdx = GetCorrectKeyButtonIndex();
+        if (correctIdx >= 0)
+        {
+            ShowArrowOnKeyButton(correctIdx);
+            if (KeyInventoryUI.Instance != null)
+                KeyInventoryUI.Instance.HighlightButton(correctIdx);
+        }
+        _showDoorArrowsCoroutine = null;
+    }
+
     public void OnKeyUsedAtDoor()
     {
-        // intentionally left empty — TutorialEnd panel is shown on 4th key collected
+        HideTutorialArrow();
+        HideTutorialPopup();
+        if (KeyInventoryUI.Instance != null)
+            KeyInventoryUI.Instance.ClearHighlight();
+
+        if (clueTutorialEnd != null)
+        {
+            clueTutorialEnd.SetActive(true);
+            Time.timeScale = 0f;
+        }
     }
 
-    // Call this to point the arrow at a specific key button. index is 0-based (K1=0, K2=1, ...)
+    public void OnCorrectKeyUsedAtDoor()
+    {
+        HideTutorialArrow();
+        HideTutorialPopup();
+        if (KeyInventoryUI.Instance != null)
+            KeyInventoryUI.Instance.ClearHighlight();
+
+        if (clueTutorialEnd != null)
+        {
+            clueTutorialEnd.SetActive(true);
+            Time.timeScale = 0f;
+        }
+    }
+
+    int GetCorrectKeyButtonIndex()
+    {
+        if (KeyGenerator.Instance == null || KeyInventory.Instance == null) return -1;
+        return KeyInventory.Instance.GetIndexForShape(KeyGenerator.Instance.correctShape);
+    }
+
     public void ShowArrowOnKeyButton(int index)
     {
-        _keyButtonArrowTarget = null; // will be resolved in UpdateArrow once buttons exist
+        _keyButtonArrowTarget = null;
         _keyButtonArrowBob = 0f;
-
-        // Store the index so UpdateArrow can look it up each frame (buttons may not exist yet)
         _pendingKeyButtonIndex = index;
         ShowArrow(ArrowTarget.KeyButton);
     }
@@ -439,6 +678,39 @@ public class TutorialManager : MonoBehaviour
     {
         _arrowTarget = ArrowTarget.None;
         _arrowCanvas.SetActive(false);
+    }
+
+    void ShowTrapTutorialEnd()
+    {
+        HideTutorialPopup();
+        HideTutorialArrow();
+
+        Time.timeScale = 0f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        GameObject p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null)
+        {
+            var ctrl = p.GetComponent<CharacterController>();
+            if (ctrl != null) ctrl.enabled = false;
+        }
+
+        if (clueTutorialEnd != null)
+        {
+            clueTutorialEnd.SetActive(true);
+
+            // Wire up any buttons to return to main menu
+            foreach (var btn in clueTutorialEnd.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() =>
+                {
+                    Time.timeScale = 1f;
+                    SceneManager.LoadScene("MainMenu-Scene");
+                });
+            }
+        }
     }
 
     void OnDestroy()

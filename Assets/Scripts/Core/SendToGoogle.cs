@@ -15,24 +15,21 @@ public class SendToGoogle : MonoBehaviour
         if (!enableAnalytics || GameManager.Instance == null) return;
 
         string sessionId = GameManager.Instance.sessionId.ToString();
-        string deathsToEnemy = GameManager.Instance.deathsToEnemy.ToString();
         string incorrectKey = GameManager.Instance.incorrectKeyCount.ToString();
         string incorrectCode = GameManager.Instance.incorrectCodeCount.ToString();
         string levelTime = Mathf.RoundToInt(GameManager.Instance.GetLevelTimeSeconds()).ToString();
 
-        StartCoroutine(Post(sessionId, incorrectKey, incorrectCode, deathsToEnemy, levelTime));
+        StartCoroutine(Post(sessionId, incorrectKey, incorrectCode, levelTime));
     }
 
     private IEnumerator Post(
         string sessionId,
         string incorrectKey,
         string incorrectCode,
-        string deathsToEnemy,
         string levelTime)
     {
         WWWForm form = new WWWForm();
         form.AddField("entry.821792080", sessionId);
-        form.AddField("entry.469094003", deathsToEnemy);
         form.AddField("entry.640080099", incorrectKey);
         form.AddField("entry.612356627", incorrectCode);
         form.AddField("entry.47591005", levelTime);

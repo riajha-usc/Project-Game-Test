@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using UnityEngine.UI;
 using TMPro;
 
 public class UIManager : MonoBehaviour
@@ -8,6 +9,7 @@ public class UIManager : MonoBehaviour
     public static UIManager Instance;
     public GameObject interactLanePrompt;
     public GameObject lane1EntryText;
+    public GameObject mainMenuButton;
 
     [Header("UI Screens")]
     public GameObject startScreen;
@@ -33,6 +35,8 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
+        if (mainMenuButton != null)
+            mainMenuButton.SetActive(false);
         if (gameLayout == null)
         {
             var layoutObj = new GameObject("GameLayout");
@@ -119,6 +123,8 @@ public class UIManager : MonoBehaviour
             if (isVictory && title != null)
                 StartCoroutine(PulseVictoryText(title));
         }
+        if (mainMenuButton != null)
+            mainMenuButton.SetActive(true);
         if (gameOverScreen != null)
             gameOverScreen.SetActive(true);
 
@@ -135,6 +141,30 @@ public class UIManager : MonoBehaviour
     public void ShowVictoryScreen()
     {
         ShowGameOver(isVictory: true);
+    }
+
+    public void ShowLevel1Complete()
+    {
+        var title = gameOverTitleText ?? (gameOverScreen != null ? gameOverScreen.GetComponentInChildren<TMP_Text>(true) : null);
+        if (title != null)
+            title.text = "<b><color=#3CFF6E>You completed Level1!</color></b>";
+
+        if (gameOverScreen != null)
+            gameOverScreen.SetActive(true);
+
+        if (gameLayout != null)
+            gameLayout.gameObject.SetActive(false);
+
+        if (interactLanePrompt != null)
+            interactLanePrompt.SetActive(false);
+
+        Time.timeScale = 0f;
+    }
+
+    void LoadMainMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene("MainMenu-Scene");
     }
 
     public void RestartGame()

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using TMPro;
 
@@ -5,16 +6,15 @@ public class ClueBox : MonoBehaviour
 {
     public string clueText         = "";
     public int    clueIndex        = 0;
-    public float  interactionRange = 4.0f;
+    public float  interactionRange = 1.8f;
+
+    public event Action OnClueOpenedEvent;
 
     private Transform  player;
     private bool       isPlayerNearby = false;
-    private bool       isClueOpen     = false;
     private GameObject clueDisplayUI;
-    private GameObject screenPromptObj;
 
     private static ClueBox currentlyOpenClue = null;
-    private static Canvas  screenCanvas;
 
     private const float DISPLAY_HEIGHT_ABOVE_BOX = 0.8f;
     private const float DISPLAY_INSET_FROM_WALL  = 0.12f;
@@ -22,43 +22,31 @@ public class ClueBox : MonoBehaviour
     void Start()
     {
         FindPlayer();
-        EnsureScreenCanvas();
-        CreateScreenPrompt();
     }
 
     void OnDestroy()
     {
-        if (screenPromptObj != null) Destroy(screenPromptObj);
-        if (clueDisplayUI   != null) Destroy(clueDisplayUI);
+        if (clueDisplayUI != null) Destroy(clueDisplayUI);
     }
 
     void Update()
     {
         if (player == null) { FindPlayer(); if (player == null) return; }
 
-        float dist     = Vector3.Distance(transform.position, player.position);
-        bool  wasNearby = isPlayerNearby;
-        isPlayerNearby  = dist <= interactionRange;
+        float dist    = Vector3.Distance(transform.position, player.position);
+        bool  inRange = dist <= interactionRange;
 
-        if       ( isPlayerNearby && !wasNearby)  ShowPrompt();
-        else if  (!isPlayerNearby &&  wasNearby)  { HidePrompt(); if (isClueOpen) CloseClue(); }
-
-        if (isPlayerNearby && !isClueOpen && Input.GetMouseButtonDown(0))
+        bool isFacing = false;
+        if (inRange)
         {
-            if (Camera.main != null)
-            {
-                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-                if (Physics.Raycast(ray, out RaycastHit hit, interactionRange + 10f))
-                {
-                    if (hit.collider != null &&
-                        (hit.collider.transform == transform ||
-                         hit.collider.transform.IsChildOf(transform)))
-                        OpenClue();
-                }
-            }
+            Vector3 dirToClue = (transform.position - player.position).normalized;
+            isFacing = Vector3.Dot(player.forward, dirToClue) > 0.4f;
         }
-        else if (isClueOpen && (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)))
-            CloseClue();
+
+        bool wasNearby = isPlayerNearby;
+        isPlayerNearby = inRange && isFacing;
+
+        if (isPlayerNearby && !wasNearby) OpenClue();
     }
 
     private void FindPlayer()
@@ -67,60 +55,12 @@ public class ClueBox : MonoBehaviour
         if (p != null) player = p.transform;
     }
 
-    private static void EnsureScreenCanvas()
-    {
-        if (screenCanvas != null) return;
-        GameObject go = new GameObject("_ClueScreenCanvas");
-        DontDestroyOnLoad(go);
-        screenCanvas = go.AddComponent<Canvas>();
-        screenCanvas.renderMode   = RenderMode.ScreenSpaceOverlay;
-        screenCanvas.sortingOrder = 20;
-        go.AddComponent<UnityEngine.UI.CanvasScaler>();
-        go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-    }
-
-    private void CreateScreenPrompt()
-    {
-        screenPromptObj = new GameObject("ClueProximityPrompt_" + clueIndex);
-        screenPromptObj.transform.SetParent(screenCanvas.transform, false);
-
-        RectTransform rt = screenPromptObj.AddComponent<RectTransform>();
-        rt.anchorMin        = new Vector2(0.5f, 0.06f);
-        rt.anchorMax        = new Vector2(0.5f, 0.06f);
-        rt.pivot            = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta        = new Vector2(460f, 56f);
-        rt.anchoredPosition = Vector2.zero;
-
-        var bg = screenPromptObj.AddComponent<UnityEngine.UI.Image>();
-        bg.color = new Color(0.06f, 0.05f, 0.04f, 0.82f);
-
-        GameObject labelGO = new GameObject("TMPLabel");
-        labelGO.transform.SetParent(screenPromptObj.transform, false);
-        RectTransform lr = labelGO.AddComponent<RectTransform>();
-        lr.anchorMin = Vector2.zero; lr.anchorMax = Vector2.one;
-        lr.offsetMin = new Vector2(14f, 5f); lr.offsetMax = new Vector2(-14f, -5f);
-
-        TextMeshProUGUI tmp = labelGO.AddComponent<TextMeshProUGUI>();
-        tmp.text               = "<b>[ Click to read Clue " + (clueIndex + 1) + " ]</b>";
-        tmp.fontSize           = 25;
-        tmp.color              = Color.white;
-        tmp.alignment          = TextAlignmentOptions.Center;
-        tmp.textWrappingMode   = TextWrappingModes.NoWrap;
-
-        screenPromptObj.SetActive(false);
-    }
-
-    private void ShowPrompt() { if (screenPromptObj != null && !isClueOpen) screenPromptObj.SetActive(true); }
-    private void HidePrompt() { if (screenPromptObj != null) screenPromptObj.SetActive(false); }
-
     private void OpenClue()
     {
         if (currentlyOpenClue != null && currentlyOpenClue != this)
             currentlyOpenClue.CloseClue();
 
-        isClueOpen        = true;
         currentlyOpenClue = this;
-        HidePrompt();
 
         if (GameManager.Instance != null)
             GameManager.Instance.RecordClueSolved(clueIndex);
@@ -129,14 +69,14 @@ public class ClueBox : MonoBehaviour
             GameLayout.Instance.Refresh();
 
         ShowCluePanel();
+
+        OnClueOpenedEvent?.Invoke();
     }
 
     private void CloseClue()
     {
-        isClueOpen = false;
         if (currentlyOpenClue == this) currentlyOpenClue = null;
         if (clueDisplayUI != null) { Destroy(clueDisplayUI); clueDisplayUI = null; }
-        if (isPlayerNearby) ShowPrompt();
     }
 
     private void ShowCluePanel()
@@ -157,45 +97,51 @@ public class ClueBox : MonoBehaviour
         Canvas dc = clueDisplayUI.AddComponent<Canvas>();
         dc.renderMode   = RenderMode.WorldSpace;
         dc.sortingOrder = 11;
+        dc.worldCamera  = Camera.main;
 
         RectTransform dr = clueDisplayUI.GetComponent<RectTransform>();
-        dr.sizeDelta  = new Vector2(200f, 150f);
+        dr.sizeDelta  = new Vector2(220f, 170f);
         dr.localScale = Vector3.one * 0.006f;
 
         clueDisplayUI.AddComponent<UnityEngine.UI.CanvasScaler>();
 
-        MakeImage(clueDisplayUI.transform, "BG",
+        Color sepia     = new Color(0.28f, 0.17f, 0.06f);
+        Color parchment = new Color(0.86f, 0.81f, 0.68f, 0.92f);
+        Color inkBrown  = new Color(0.18f, 0.10f, 0.04f);
+
+        MakeImage(clueDisplayUI.transform, "OuterBorder",
             Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
-            new Color(0.95f, 0.90f, 0.80f, 0.97f));
+            new Color(0.28f, 0.17f, 0.06f, 0.9f));
 
-        // Black header bar
-        MakeImage(clueDisplayUI.transform, "HeaderBar",
-            new Vector2(0f, 0.76f), new Vector2(1f, 1f),
+        MakeImage(clueDisplayUI.transform, "BG",
+            Vector2.zero, Vector2.one,
+            new Vector2(3f, 3f), new Vector2(-3f, -3f),
+            parchment);
+
+        MakeImage(clueDisplayUI.transform, "HeaderBG",
+            new Vector2(0f, 0.74f), new Vector2(1f, 1f),
+            new Vector2(3f, 0f), new Vector2(-3f, -3f),
+            new Color(0.22f, 0.13f, 0.04f, 1f));
+
+        MakeImage(clueDisplayUI.transform, "Divider",
+            new Vector2(0.05f, 0.737f), new Vector2(0.95f, 0.748f),
             Vector2.zero, Vector2.zero,
-            new Color(0.05f, 0.05f, 0.05f, 1f));
+            new Color(0.55f, 0.38f, 0.14f, 1f));
 
-        // Header text (white on black)
         MakeTMP(clueDisplayUI.transform, "Header",
-            new Vector2(0f, 0.76f), new Vector2(1f, 1f),
-            new Vector2(8f, 0f), new Vector2(-8f, 0f),
-            "CLUE " + (clueIndex + 1),
-            22, Color.white, TextAlignmentOptions.Center, FontStyles.Bold);
+            new Vector2(0f, 0.74f), new Vector2(1f, 1f),
+            new Vector2(8f, 2f), new Vector2(-8f, -2f),
+            "~ Clue " + (clueIndex + 1) + " ~",
+            20, new Color(0.96f, 0.88f, 0.68f), TextAlignmentOptions.Center, FontStyles.Bold);
 
-        // Clue body
         MakeTMP(clueDisplayUI.transform, "ClueText",
-            new Vector2(0f, 0.18f), new Vector2(1f, 0.76f),
-            new Vector2(18f, 0f),   new Vector2(-18f, 0f),
-            "\"" + clueText + "\"",
-            18, new Color(0.12f, 0.08f, 0.04f), TextAlignmentOptions.Center, FontStyles.Italic,
+            new Vector2(0f, 0f), new Vector2(1f, 0.74f),
+            new Vector2(18f, 12f), new Vector2(-18f, -8f),
+            "\u201c" + clueText + "\u201d",
+            17, inkBrown, TextAlignmentOptions.Center, FontStyles.Italic,
             wrap: true);
-
-        // Close hint
-        MakeTMP(clueDisplayUI.transform, "CloseHint",
-            new Vector2(0f, 0f), new Vector2(1f, 0.18f),
-            new Vector2(8f, 0f),  new Vector2(-8f, 0f),
-            "[Right-click or ESC to close]",
-            13, new Color(0.45f, 0.35f, 0.25f, 0.8f), TextAlignmentOptions.Center, FontStyles.Normal);
     }
+
 
     private void MakeImage(Transform parent, string n,
         Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax, Color color)

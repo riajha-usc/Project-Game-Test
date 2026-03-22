@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class PlayerPersist : MonoBehaviour
 {
@@ -6,6 +7,12 @@ public class PlayerPersist : MonoBehaviour
 
     void Awake()
     {
+        string scene = SceneManager.GetActiveScene().name;
+        if (!scene.StartsWith("Level"))
+        {
+            return;
+        }
+
         if (instance == null)
         {
             instance = this;

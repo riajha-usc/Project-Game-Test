@@ -8,6 +8,9 @@ TagManager:
   - HpBooster
   - Enemy
   - Pulser
+  - Divider
+  - Walll
+  - Door
   layers:
   - Default
   - TransparentFX

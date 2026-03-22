@@ -12,6 +12,21 @@ public class ClueBoxGenerator : MonoBehaviour
     public Color boxColor  = Color.black;
     public Color trimColor = Color.gray;
 
+    public static void SpawnForActiveScene(List<string> clues = null)
+    {
+        ClueBoxGenerator clueGen = FindFirstObjectByType<ClueBoxGenerator>();
+        if (clueGen == null)
+        {
+            var go = new GameObject("_ClueGen");
+            clueGen = go.AddComponent<ClueBoxGenerator>();
+            clueGen.boxWidth = 0.7f;
+            clueGen.boxHeight = 0.6f;
+        }
+
+        string sceneName = SceneManager.GetActiveScene().name;
+        clueGen.SpawnForScene(sceneName, clues);
+    }
+
     private static readonly BoxPlacement[] LANE2_PLACEMENTS = new BoxPlacement[]
     {
         new BoxPlacement(new Vector3(-2.77f, 1.5f,  12.0f), Quaternion.Euler(0f, 270f, 0f)),
@@ -24,36 +39,49 @@ public class ClueBoxGenerator : MonoBehaviour
         new BoxPlacement(new Vector3(-2.77f, 1.5f, 22.0f), Quaternion.Euler(0f, 270f, 0f)),
         new BoxPlacement(new Vector3( 2.77f, 1.5f, 32.0f), Quaternion.Euler(0f, 90f, 0f)),
     };
-
-    private string currentScene;
-
-    void Start()
+    private static readonly BoxPlacement[] LEVEL1_PLACEMENT = new BoxPlacement[]
     {
-        currentScene = SceneManager.GetActiveScene().name;
+        new BoxPlacement(new Vector3(1.9f, 1.5f, 13.717f), Quaternion.Euler(0f, 2.067f, 0f)),
+    };
 
-        if      (currentScene == "Level1-Lane2") StartCoroutine(WaitAndSpawn());
-        else if (currentScene == "Level1-Lane3") SpawnClues(LANE3_PLACEMENTS, GetLane3Clues(), "Lane3");
+    public void SpawnForScene(string sceneName, List<string> clues = null)
+    {
+        if (FindFirstObjectByType<ClueBox>() != null) return;
+
+        if (sceneName == "Level1")
+        {
+            string clue = (clues != null && clues.Count > 0) ? clues[0] : null;
+            SpawnLevel1Clue(clue);
+        }
+        else if (sceneName == "Level2")
+        {
+            var lane2Clues = (clues != null && clues.Count > 0) ? clues : GetLane2Clues();
+            SpawnClues(LANE2_PLACEMENTS, lane2Clues, "Lane2");
+        }
+        else if (sceneName == "Level3")
+        {
+            SpawnClues(LANE3_PLACEMENTS, GetLane3Clues(), "Lane3");
+        }
     }
 
-    System.Collections.IEnumerator WaitAndSpawn()
+    public GameObject SpawnLevel1Clue(string clueTextOverride = null)
     {
-        yield return null;
-        yield return null;
-        SpawnClues(LANE2_PLACEMENTS, GetLane2Clues(), "Lane2");
+        string clue = string.IsNullOrEmpty(clueTextOverride) ? GetLevel1Clue() : clueTextOverride;
+        return CreateClueBox("Level1_Clue0", LEVEL1_PLACEMENT[0].position, LEVEL1_PLACEMENT[0].rotation, clue, 0);
     }
 
     void SpawnClues(BoxPlacement[] placements, List<string> clues, string prefix)
     {
         int count = Mathf.Min(clues.Count, placements.Length);
         for (int i = 0; i < count; i++)
-            CreateClueBox(prefix + "_Clue" + i, placements[i], clues[i], i);
+            CreateClueBox(prefix + "_Clue" + i, placements[i].position, placements[i].rotation, clues[i], i);
     }
 
-    GameObject CreateClueBox(string name, BoxPlacement p, string clueText, int index)
+    public GameObject CreateClueBox(string name, Vector3 position, Quaternion rotation, string clueText, int index)
     {
         GameObject root = new GameObject(name);
-        root.transform.position = p.position;
-        root.transform.rotation = p.rotation;
+        root.transform.position = position;
+        root.transform.rotation = rotation;
 
         GameObject body = MakePrimitive(root, "BoxBody", PrimitiveType.Cube,
             new Vector3(boxWidth, boxHeight, boxDepth),
@@ -99,57 +127,47 @@ public class ClueBoxGenerator : MonoBehaviour
         c.sortingOrder = 15;
 
         RectTransform cr = canvasGO.GetComponent<RectTransform>();
-        cr.sizeDelta  = new Vector2(220f, 90f);
-        cr.localScale = Vector3.one * 0.002f;
+        cr.sizeDelta  = new Vector2(240f, 140f);
+        cr.localScale = Vector3.one * 0.0026f;
 
         canvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
 
+        GameObject borderGO = new GameObject("Border");
+        borderGO.transform.SetParent(canvasGO.transform, false);
+        borderGO.transform.SetAsFirstSibling();
+        borderGO.layer = 5;
+        RectTransform borderRect = borderGO.AddComponent<RectTransform>();
+        borderRect.anchorMin = Vector2.zero;
+        borderRect.anchorMax = Vector2.one;
+        borderRect.offsetMin = borderRect.offsetMax = Vector2.zero;
+        borderGO.AddComponent<UnityEngine.UI.Image>().color = new Color(1f, 0.84f, 0f, 0.92f);
+
         GameObject bgGO = new GameObject("FaceBG");
         bgGO.transform.SetParent(canvasGO.transform, false);
-        bgGO.transform.SetAsFirstSibling();
         bgGO.layer = 5;
         RectTransform bgRect = bgGO.AddComponent<RectTransform>();
         bgRect.anchorMin = Vector2.zero;
         bgRect.anchorMax = Vector2.one;
-        bgRect.offsetMin = bgRect.offsetMax = Vector2.zero;
-        var bgImg = bgGO.AddComponent<UnityEngine.UI.Image>();
-        bgImg.color = new Color(0.08f, 0.06f, 0.04f, 0.95f);
+        bgRect.offsetMin = new Vector2(3f, 3f);
+        bgRect.offsetMax = new Vector2(-3f, -3f);
+        bgGO.AddComponent<UnityEngine.UI.Image>().color = new Color(0.07f, 0.05f, 0.03f, 0.97f);
 
         GameObject numGO = new GameObject("ClueNum");
         numGO.transform.SetParent(canvasGO.transform, false);
         numGO.layer = 5;
         RectTransform nr = numGO.AddComponent<RectTransform>();
-        nr.anchorMin = new Vector2(0f, 0.54f); nr.anchorMax = new Vector2(1f, 1f);
-        nr.offsetMin = new Vector2(6f, 2f);    nr.offsetMax = new Vector2(-6f, -2f);
+        nr.anchorMin = Vector2.zero;
+        nr.anchorMax = Vector2.one;
+        nr.offsetMin = new Vector2(10f, 6f);
+        nr.offsetMax = new Vector2(-10f, -6f);
         TextMeshProUGUI numTMP = numGO.AddComponent<TextMeshProUGUI>();
-        numTMP.text               = "CLUE " + (index + 1);
-        numTMP.fontSize           = 22;
-        numTMP.color              = Color.yellow;
-        numTMP.alignment          = TextAlignmentOptions.Bottom;
-        numTMP.fontStyle          = FontStyles.Bold;
-        numTMP.textWrappingMode   = TextWrappingModes.NoWrap;
+        numTMP.text             = "CLUE " + (index + 1);
+        numTMP.fontSize         = 38;
+        numTMP.color            = new Color(1f, 0.84f, 0f);
+        numTMP.alignment        = TextAlignmentOptions.Center;
+        numTMP.fontStyle        = FontStyles.Bold;
+        numTMP.textWrappingMode = TextWrappingModes.NoWrap;
 
-        GameObject divGO = new GameObject("Divider");
-        divGO.transform.SetParent(canvasGO.transform, false);
-        divGO.layer = 5;
-        RectTransform dr = divGO.AddComponent<RectTransform>();
-        dr.anchorMin = new Vector2(0.08f, 0.50f); dr.anchorMax = new Vector2(0.92f, 0.52f);
-        dr.offsetMin = dr.offsetMax = Vector2.zero;
-        divGO.AddComponent<UnityEngine.UI.Image>().color = Color.yellow;
-
-        GameObject txtGO = new GameObject("ClickLabel");
-        txtGO.transform.SetParent(canvasGO.transform, false);
-        txtGO.layer = 5;
-        RectTransform tr = txtGO.AddComponent<RectTransform>();
-        tr.anchorMin = new Vector2(0f, 0.04f); tr.anchorMax = new Vector2(1f, 0.50f);
-        tr.offsetMin = new Vector2(6f, 2f);    tr.offsetMax = new Vector2(-6f, -2f);
-        TextMeshProUGUI clickTMP = txtGO.AddComponent<TextMeshProUGUI>();
-        clickTMP.text               = "Click to see clue";
-        clickTMP.fontSize           = 17;
-        clickTMP.color              = Color.white;
-        clickTMP.alignment          = TextAlignmentOptions.Top;
-        clickTMP.fontStyle          = FontStyles.Normal;
-        clickTMP.textWrappingMode   = TextWrappingModes.NoWrap;
     }
 
     private List<string> GetLane2Clues()
@@ -164,6 +182,14 @@ public class ClueBoxGenerator : MonoBehaviour
             "Look carefully at the shapes.",
             "One shape holds the answer."
         };
+    }
+
+    private string GetLevel1Clue()
+    {
+        KeyGenerator keyGen = FindFirstObjectByType<KeyGenerator>();
+        if (keyGen?.generatedClues != null && keyGen.generatedClues.Count > 0)
+            return keyGen.generatedClues[0];
+        return "Look carefully at the shapes.";
     }
 
     private List<string> GetLane3Clues() => new List<string>

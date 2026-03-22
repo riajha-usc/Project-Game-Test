@@ -32,10 +32,7 @@ public class KeyItem : MonoBehaviour
             KeyInventory.Instance.AddKey(shape, color, spinning);
 
         if (KeyGenerator.Instance != null)
-            KeyGenerator.Instance.OnTutorialKeyCollected(shape);
-
-        if (TutorialManager.Instance != null)
-            TutorialManager.Instance.OnKeyCollected();
+            KeyGenerator.Instance.OnKeyCollected(shape);
 
         RectTransform target = null;
         if (KeyInventoryUI.Instance != null)

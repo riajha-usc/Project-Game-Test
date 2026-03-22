@@ -13,11 +13,9 @@ public class GameManager : MonoBehaviour
 
     [Header("Progress (persisted across lanes)")]
     [HideInInspector] public int lanesCompleted = 0;
-    public int totalLanes = 3;
 
     [Header("Session Metrics (for analytics)")]
     [HideInInspector] public long sessionId;
-    [HideInInspector] public int deathsToEnemy;
     [HideInInspector] public int incorrectKeyCount;
     [HideInInspector] public int incorrectCodeCount;
     [HideInInspector] public int keyAttemptCount;
@@ -28,11 +26,8 @@ public class GameManager : MonoBehaviour
     [HideInInspector] public float levelCompleteTime;
 
     [Header("Key Data (persisted across lanes)")]
-    [HideInInspector] public string lane1CorrectShape;
-    [HideInInspector] public string lane1CorrectColor;
-    [HideInInspector] public string lane2CorrectShape;
-    [HideInInspector] public string lane2CorrectColor;
-    [HideInInspector] public bool lane2CorrectKeySpinning;
+    [HideInInspector] public string levelCorrectShape;
+    [HideInInspector] public string levelCorrectColor;
     [HideInInspector] public List<string> lane2Clues = new List<string>();
 
     public string finalAnswer;
@@ -70,11 +65,6 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 1f;
         sessionId = System.DateTime.Now.Ticks;
         levelStartTime = Time.unscaledTime;
-    }
-
-    public void RecordDeathToEnemy()
-    {
-        deathsToEnemy++;
     }
 
     public void RecordIncorrectKey()
@@ -125,10 +115,6 @@ public class GameManager : MonoBehaviour
         }
         if (GameLayout.Instance != null)
             GameLayout.Instance.HideWrongFeedback();
-        var keyUI = KeyInventoryUI.Instance;
-        if (keyUI != null && keyUI.openPromptUI != null)
-            keyUI.openPromptUI.SetActive(false);
-
         foreach (var lane3 in FindObjectsOfType<Lane3DoorInteraction>())
         {
             lane3.CloseInputPanel();
@@ -148,7 +134,6 @@ public class GameManager : MonoBehaviour
     {
         currentState = GameState.Start;
         lanesCompleted = 0;
-        deathsToEnemy = 0;
         incorrectKeyCount = 0;
         incorrectCodeCount = 0;
         keyAttemptCount = 0;
@@ -219,18 +204,14 @@ public class GameManager : MonoBehaviour
 
     public int GetCurrentLaneNumber()
     {
-        // Use scene build index for accuracy (handles starting in any lane)
-        int idx = SceneManager.GetActiveScene().buildIndex;
-        int lane = Mathf.Clamp(idx + 1, 1, totalLanes);
-        return lane;
+        return 1;
     }
 
     public int GetTotalCluesForCurrentLane()
     {
         string scene = SceneManager.GetActiveScene().name;
-        if (scene == "Level1-Lane2") return 2;
-        if (scene == "Level1-Lane3") return 3;
-        return 0;
+        if (scene == "Level1") return 1;
+        return 2;
     }
 
     public int GetMaxAttemptsForCurrentLane()

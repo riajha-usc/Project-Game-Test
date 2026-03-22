@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(CharacterController))]
@@ -12,88 +13,80 @@ public class PlayerMovement3D : MonoBehaviour
     private CharacterController controller;
     private Vector3 velocity;
 
-    [Header("Primary Fields")]
+    [Header("Player Operation Fields")]
+    //public string mode = "default";
+    private Vector3 spawnPosition;
+    private Quaternion spawnRotation;
+
+    [Header("Health")]
     public Rigidbody rb;
     public float hp = 200f;
     public Slider healthbar;
     public TMP_Text healthtxt;
     public float maxHp = 0f;
-    public float hpBoost = 20f;
-
-    [Header("PerkFields")]
-    public float pulsecost = 0.05f; // In % of hp
-    public GameObject pulsePrefab;
-    public bool usePulse = false;
-    public Slider pulseBar;
-    public TMP_Text pulseText;
-    public float maxPulse = 50f;
-    public float defaultPulse = 20f;
-    private float playerPulse = 0f;
-    public float pulseIncrement = 5f;
     private bool isDead = false;
 
 
-    void Start()
+    void Awake()
     {
         controller = GetComponent<CharacterController>();
+        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb != null) rb.freezeRotation = true;
+    }
+
+    void OnEnable()  { SceneManager.sceneLoaded += OnSceneLoaded; }
+    void OnDisable() { SceneManager.sceneLoaded -= OnSceneLoaded; }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        isDead = false;
+        velocity = Vector3.zero;
+        if (controller != null) controller.enabled = true;
+        ResetToSpawnPoint();
+    }
+
+    private void ResetToSpawnPoint()
+    {
+        GameObject spawn = GameObject.Find("PlayerSpawnPoint");
+        if (spawn == null) spawn = GameObject.FindWithTag("Respawn");
+        if (spawn != null)
+        {
+            if (controller != null) controller.enabled = false;
+            transform.position = spawn.transform.position;
+            transform.rotation = spawn.transform.rotation;
+            if (controller != null) controller.enabled = true;
+        }
+        spawnPosition = transform.position;
+        spawnRotation = transform.rotation;
+    }
+
+    void Start()
+    {
         Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        Bounds b = renderers[0].bounds;
-        foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
-        if (rb == null)
+        if (renderers.Length > 0)
         {
-            rb = GetComponent<Rigidbody>();
-        }
-        if (rb != null)
-        {
-            rb.freezeRotation = true;
+            Bounds b = renderers[0].bounds;
+            foreach (Renderer r in renderers) b.Encapsulate(r.bounds);
         }
 
-        //Renderer renderer = GetComponent<Renderer>();
-        //if (renderer != null)
-        //{
-        //    renderer.material.color = Color.yellow;
-        //}
+        if (maxHp <= 0f)
+            maxHp = 200f;
 
-        maxHp = hp;
-        playerPulse = defaultPulse;
-        if (pulseBar != null)
-            pulseBar.gameObject.SetActive(usePulse);
+        hp = maxHp;
+        isDead = false;
 
-        if (pulseText != null)
-            pulseText.gameObject.SetActive(usePulse);
+        ResetToSpawnPoint();
     }
 
     void Update()
     {
         Die();
-        PulseCalculator();
         if (healthtxt != null) healthtxt.text = Mathf.RoundToInt(hp) + " / " + Mathf.RoundToInt(maxHp);
         if (healthbar != null) healthbar.value = hp / maxHp;
-        if (usePulse)
-        {
-            if (pulseBar != null) pulseBar.gameObject.SetActive(true);
-            if (pulseText != null) pulseText.gameObject.SetActive(true);
-
-            if (pulseText != null)
-                pulseText.text = playerPulse + " / " + maxPulse;
-
-            if (pulseBar != null)
-                pulseBar.value = playerPulse / maxPulse;
-
-            if (Input.GetKeyDown(KeyCode.Space) && playerPulse >= 30f)
-            {
-                FirePulse();
-            }
-        }
-        else
-        {
-            if (pulseBar != null) pulseBar.gameObject.SetActive(false);
-            if (pulseText != null) pulseText.gameObject.SetActive(false);
-        }
 
         float x = Input.GetAxisRaw("Horizontal");
         float z = Mathf.Max(0, Input.GetAxis("Vertical"));
-        
+
         if (Mathf.Abs(x) < 0.15f) x = 0;
         if (Mathf.Abs(z) < 0.15f) z = 0;
 
@@ -126,11 +119,7 @@ public class PlayerMovement3D : MonoBehaviour
         {
             hp = maxHp;
             isDead = false;
-            usePulse = false;
-            playerPulse = defaultPulse;
             if (controller != null) controller.enabled = true;
-            if (pulseBar != null) pulseBar.gameObject.SetActive(usePulse);
-            if (pulseText != null) pulseText.gameObject.SetActive(usePulse);
         }
     }
     private void Die()
@@ -138,10 +127,15 @@ public class PlayerMovement3D : MonoBehaviour
         if (hp <= 0.001f && !isDead)
         {
             isDead = true;
+            if (TutorialManager.Instance != null &&
+                TutorialManager.Instance.tutorialType == "traps")
+            {
+                SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                return;
+            }
 
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.RecordDeathToEnemy();
                 GameManager.Instance.GameOver();
             }
 
@@ -153,48 +147,8 @@ public class PlayerMovement3D : MonoBehaviour
         }
     }
 
-    private void OnTriggerEnter(Collider other)
+    public void TakeDamage(float amount)
     {
-        if (other.CompareTag("HpBooster") && hp != maxHp)
-        {
-            hp = Mathf.Clamp(hp + hpBoost, 0f, maxHp);
-        }
-        if (other.CompareTag("Projectile") && !SafeZoneController.InSafeZone)
-        {
-            ProjectileController pc = other.GetComponent<ProjectileController>();
-            if (pc != null)
-            {
-                hp = Mathf.Max(0f, hp - pc.damage);
-                Destroy(other.gameObject);
-            }
-        }
-        if(other.CompareTag("Pulser"))
-        {
-            usePulse = true;
-        }
-    }
-
-    public void PulseCalculator()
-    {
-        if (Input.GetKeyDown(KeyCode.E))
-        {
-            playerPulse = Mathf.Clamp(playerPulse + pulseIncrement, 0f, maxPulse);
-        }
-    }
-
-    private void FirePulse()
-    {
-        GameObject pulse = Instantiate(pulsePrefab, transform.position, Quaternion.identity);
-
-        PulseController pc = pulse.GetComponent<PulseController>();
-
-        if (pc != null)
-        {
-            float chargePercent = playerPulse / maxPulse;
-            pc.Initialize(chargePercent);
-            hp = Mathf.Max(0f, hp - (pulsecost * hp));
-        }
-
-        playerPulse = 0f;
+        hp = Mathf.Max(0f, hp - amount);
     }
 }

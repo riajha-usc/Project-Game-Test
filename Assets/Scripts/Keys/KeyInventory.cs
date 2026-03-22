@@ -27,6 +27,13 @@ public class KeyInventory : MonoBehaviour
         return requiredKeyCount > 0 && keys.Count >= requiredKeyCount;
     }
 
+    public int GetIndexForShape(KeyHeadShape shape)
+    {
+        for (int i = 0; i < keys.Count; i++)
+            if (keys[i].shape == shape) return i;
+        return -1;
+    }
+
     public void AddKey(KeyHeadShape shape, KeyColorType color, bool spinning)
     {
         keys.Add(new KeyData(shape, color, spinning));

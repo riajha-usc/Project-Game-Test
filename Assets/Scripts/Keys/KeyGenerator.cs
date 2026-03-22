@@ -13,7 +13,7 @@ public class KeyGenerator : MonoBehaviour
     public float slantX = 18f;
     public float slantZ = 10f;
     public float rotateSpeed = 80f;
-    public string currentScene;
+    string CurrentScene => SceneManager.GetActiveScene().name;
 
     readonly System.Collections.Generic.List<GameObject> _tutorialShapeLabels = new System.Collections.Generic.List<GameObject>();
     readonly System.Collections.Generic.Dictionary<KeyHeadShape, GameObject> _tutorialLabelByShape =
@@ -23,6 +23,8 @@ public class KeyGenerator : MonoBehaviour
     [HideInInspector] public KeyColorType correctColor;
     [HideInInspector] public bool correctKeySpinning = true;
     [HideInInspector] public List<string> generatedClues = new List<string>();
+    const KeyHeadShape TutorialCorrectShape = KeyHeadShape.Square;
+    const KeyColorType TutorialCorrectColor = KeyColorType.Yellow;
 
     void Awake()
     {
@@ -45,21 +47,25 @@ public class KeyGenerator : MonoBehaviour
         Debug.Log("KeyGenerator Start");
         if (spawnPoints == null || spawnPoints.Length == 0) return;
 
-        if (currentScene == "Tutorial-1")
+        if (CurrentScene == "Tutorial-1")
             GenerateTutorial1();
-        else if (currentScene == "Level1-Lane1")
+        else if (CurrentScene == "Level1")
             GenerateLane1();
-        else if (currentScene == "Level1-Lane2")
+        else if (CurrentScene == "Level2")
             GenerateLane2();
     }
 
     void GenerateTutorial1()
     {
+        correctShape = TutorialCorrectShape;
+        correctColor = TutorialCorrectColor;
+
         KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
-        KeyColorType color = KeyColorType.Yellow;
+        KeyColorType color = TutorialCorrectColor;
         int count = Mathf.Min(spawnPoints.Length, shapes.Length);
         Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
         int teeth = 3;
+        // same color but different shapes
         for (int i = 0; i < count; i++)
         {
             if (spawnPoints[i] == null) continue;
@@ -72,8 +78,7 @@ public class KeyGenerator : MonoBehaviour
                 teeth,
                 spinning: true);
         }
-
-        // Show world-space shape labels above the tutorial keys
+        // shape labels above the tutorial keys
         ShowTutorialShapeLabels(true);
     }
 
@@ -126,7 +131,6 @@ public class KeyGenerator : MonoBehaviour
             UnityEngine.UI.Image img = bg.AddComponent<UnityEngine.UI.Image>();
             img.color = new Color(0.05f, 0.05f, 0.05f, 0.85f);
 
-            // Text
             GameObject textGO = new GameObject("Label");
             textGO.transform.SetParent(go.transform, false);
             RectTransform tRt = textGO.AddComponent<RectTransform>();
@@ -150,29 +154,40 @@ public class KeyGenerator : MonoBehaviour
         }
     }
 
-    public void OnTutorialKeyCollected(KeyHeadShape collectedShape)
+    public void OnKeyCollected(KeyHeadShape collectedShape)
     {
-        if (currentScene != "Tutorial-1" || _tutorialLabelByShape.Count == 0)
-            return;
+        bool tutorialLike = CurrentScene == "Tutorial-1" || CurrentScene == "Level1";
+        if (!tutorialLike) return;
 
         if (_tutorialLabelByShape.TryGetValue(collectedShape, out var label) && label != null)
             label.SetActive(false);
+
+        if (CurrentScene == "Tutorial-1" && TutorialManager.Instance != null)
+            TutorialManager.Instance.OnKeyCollected();
     }
 
     void GenerateLane1()
     {
         KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
-        KeyColorType[] colors = (KeyColorType[])Enum.GetValues(typeof(KeyColorType));
-
-        // only one shape and color for lane 1
+        correctColor = KeyColorType.Yellow;
         correctShape = shapes[Random.Range(0, shapes.Length)];
-        correctColor = colors[Random.Range(0, colors.Length)];
-        int teeth = Random.Range(1, 7);
+        generatedClues = new List<string>(GetShapeClues(correctShape));
+        int teeth = 3;
         Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
-        CreateKeyObject("Key_0", spawnPoints[0].position, keyRot, correctShape, correctColor, teeth);
+        int count = Mathf.Min(spawnPoints.Length, shapes.Length);
+        for (int i = 0; i < count; i++)
+        {
+            if (spawnPoints[i] == null) continue;
+            CreateKeyObject($"Level1_Key_{i}_{shapes[i]}",
+                spawnPoints[i].position, keyRot, shapes[i], correctColor, teeth, spinning: true);
+        }
+        if (KeyInventory.Instance != null)
+            KeyInventory.Instance.requiredKeyCount = count;
+        ShowTutorialShapeLabels(true);
+        ClueBoxGenerator.SpawnForActiveScene(generatedClues);
 
         PersistToGameManager();
-        Debug.Log($"[Lane1] Correct key: {correctColor} {correctShape}");
+        Debug.Log($"[Level1] Correct key: {correctColor} {correctShape}");
     }
 
     void GenerateLane2()
@@ -206,6 +221,7 @@ public class KeyGenerator : MonoBehaviour
             generatedClues.Add("The patient key never dances.");
         }
 
+        ClueBoxGenerator.SpawnForActiveScene(generatedClues);
         PersistToGameManager();
 
         string[] puzzleNames = { "Color", "Shape", "Spin" };
@@ -236,13 +252,13 @@ public class KeyGenerator : MonoBehaviour
         switch (shape)
         {
             case KeyHeadShape.Circle:
-                return new[] { "Endless yet complete.", "It never breaks into corners." };
+                return new[] { "Key shape that never breaks into corners" }; // need to add more for level 2
             case KeyHeadShape.Square:
-                return new[] { "Balance defines the answer.", "Where all sides agree is the answer."};
+                return new[] { "Key shape where all sides agree"}; 
             case KeyHeadShape.Capsule:
-                return new[] { "Neither sharp nor whole.", "Two curves guard a straight path." };
+                return new[] { "Key shape that is neither sharp nor whole." };
             case KeyHeadShape.Cross:
-                return new[] { "The answer points in all directions.", "Where two paths meet, the truth lies." };
+                return new[] { "Key shape where two paths meet"};
             default:
                 return new[] { "Look carefully at the shapes.", "One shape holds the answer." };
         }
@@ -252,19 +268,16 @@ public class KeyGenerator : MonoBehaviour
     {
         if (GameManager.Instance == null) return;
 
-        if (currentScene == "Level1-Lane1")
+        if (CurrentScene == "Level1")
         {
-            GameManager.Instance.lane1CorrectShape = correctShape.ToString();
-            GameManager.Instance.lane1CorrectColor = correctColor.ToString();
+            GameManager.Instance.levelCorrectShape = correctShape.ToString();
+            GameManager.Instance.levelCorrectColor = correctColor.ToString();
         }
-        else if (currentScene == "Level1-Lane2")
+        else if (CurrentScene == "Level2")
         {
-            GameManager.Instance.lane2CorrectShape = correctShape.ToString();
-            GameManager.Instance.lane2CorrectColor = correctColor.ToString();
-            GameManager.Instance.lane2CorrectKeySpinning = correctKeySpinning;
             GameManager.Instance.lane2Clues = new List<string>(generatedClues);
             // Lane 3 door answer = lane1's color + lane2's shape
-            GameManager.Instance.finalAnswer = $"{GameManager.Instance.lane1CorrectColor} {GameManager.Instance.lane2CorrectShape}";
+            GameManager.Instance.finalAnswer = $"{GameManager.Instance.levelCorrectColor} {correctShape}";
         }
     }
 
@@ -331,7 +344,7 @@ public class KeyGenerator : MonoBehaviour
         head.name = "Head_Circle";
         head.transform.SetParent(parent, false);
         head.transform.localRotation = Quaternion.Euler(90, 0, 0);
-        head.transform.localScale = new Vector3(0.42f, 0.05f, 0.42f);
+        head.transform.localScale = new Vector3(0.76f, 0.05f, 0.76f);
         head.transform.localPosition = new Vector3(0, headY, 0);
         Destroy(head.GetComponent<Collider>());
     }
@@ -341,7 +354,7 @@ public class KeyGenerator : MonoBehaviour
         GameObject head = GameObject.CreatePrimitive(PrimitiveType.Cube);
         head.name = "Head_Square";
         head.transform.SetParent(parent, false);
-        head.transform.localScale = new Vector3(0.42f, 0.07f, 0.42f);
+        head.transform.localScale = new Vector3(0.76f, 0.07f, 0.76f);
         head.transform.localPosition = new Vector3(0, headY, 0);
         Destroy(head.GetComponent<Collider>());
     }
@@ -352,7 +365,7 @@ public class KeyGenerator : MonoBehaviour
         head.name = "Head_Capsule";
         head.transform.SetParent(parent, false);
         head.transform.localRotation = Quaternion.Euler(0, 0, 90);
-        head.transform.localScale = new Vector3(0.22f, 0.22f, 0.22f);
+        head.transform.localScale = new Vector3(0.46f, 0.40f, 0.46f);
         head.transform.localPosition = new Vector3(0, headY, 0);
         Destroy(head.GetComponent<Collider>());
     }
@@ -362,14 +375,14 @@ public class KeyGenerator : MonoBehaviour
         GameObject a = GameObject.CreatePrimitive(PrimitiveType.Cube);
         a.name = "Cross_A";
         a.transform.SetParent(parent, false);
-        a.transform.localScale = new Vector3(0.50f, 0.07f, 0.18f);
+        a.transform.localScale = new Vector3(0.76f, 0.07f, 0.34f);
         a.transform.localPosition = new Vector3(0, headY, 0);
         Destroy(a.GetComponent<Collider>());
 
         GameObject b = GameObject.CreatePrimitive(PrimitiveType.Cube);
         b.name = "Cross_B";
         b.transform.SetParent(parent, false);
-        b.transform.localScale = new Vector3(0.18f, 0.07f, 0.50f);
+        b.transform.localScale = new Vector3(0.34f, 0.07f, 0.76f);
         b.transform.localPosition = new Vector3(0, headY, 0);
         Destroy(b.GetComponent<Collider>());
     }

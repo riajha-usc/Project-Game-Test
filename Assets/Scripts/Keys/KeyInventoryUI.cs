@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using TMPro;
 
 public class KeyInventoryUI : MonoBehaviour
@@ -10,12 +11,17 @@ public class KeyInventoryUI : MonoBehaviour
     public Transform keyBarParent;
     public Button keyButtonTemplate;
     public GameObject keysText;
-    public GameObject openPromptUI;
     List<Button> spawnedButtons = new List<Button>();
     bool doorInRange = false;
     Coroutine flashCoroutine;
     Coroutine vibrateCoroutine;
     Vector2 keyBarBasePos;
+
+    GameObject _highlightOverlay;
+    Coroutine _highlightCoroutine;
+
+    readonly DoorKeyArrowOverlay _doorKeyArrowOverlay = new DoorKeyArrowOverlay();
+    Transform _cachedPlayerTransform;
 
     [Header("Optional: Key Shape Sprites (for Tutorial-1)")]
     public Sprite circleSprite;
@@ -23,14 +29,14 @@ public class KeyInventoryUI : MonoBehaviour
     public Sprite capsuleSprite;
     public Sprite crossSprite;
 
-    public string sceneName;
+    public bool KeyButtonsInteractable { get; private set; }
+    string SceneName => SceneManager.GetActiveScene().name;
 
     Dictionary<KeyHeadShape, Sprite> _generatedShapeSprites = new Dictionary<KeyHeadShape, Sprite>();
 
     void Awake()
     {
         Instance = this;
-        if (openPromptUI != null) openPromptUI.SetActive(false);
         if (keyBarParent != null)
             keyBarParent.gameObject.SetActive(false);
     }
@@ -42,6 +48,11 @@ public class KeyInventoryUI : MonoBehaviour
 
     void Update()
     {
+        if (_doorKeyArrowOverlay.IsVisible && SceneName != "Level1")
+            HideKeybarPressArrow();
+        else if (_doorKeyArrowOverlay.IsVisible && SceneName == "Level1")
+            _doorKeyArrowOverlay.Tick(_cachedPlayerTransform, keyBarParent);
+
         if (KeyInventory.Instance == null || KeyInventory.Instance.keys.Count == 0) return;
         if (!doorInRange || !KeyInventory.Instance.HasAllKeys()) return;
 
@@ -73,13 +84,6 @@ public class KeyInventoryUI : MonoBehaviour
             TryUnlockWithKey(list[index]);
     }
 
-    void UpdateOpenPrompt()
-    {
-        if (openPromptUI == null) return;
-        bool hasAllKeys = KeyInventory.Instance != null && KeyInventory.Instance.HasAllKeys();
-        openPromptUI.SetActive(doorInRange && hasAllKeys);
-    }
-
     public RectTransform GetFlyTarget()
     {
         if (spawnedButtons.Count > 0)
@@ -99,7 +103,6 @@ public class KeyInventoryUI : MonoBehaviour
     {
         doorInRange = inRange;
         UpdateButtonsInteractable();
-        UpdateOpenPrompt();
     }
 
     public void Refresh()
@@ -132,7 +135,7 @@ public class KeyInventoryUI : MonoBehaviour
             Button b = Instantiate(keyButtonTemplate, keyBarParent);
             b.gameObject.SetActive(true);
             TMP_Text t = b.GetComponentInChildren<TMP_Text>(true);
-            if (sceneName == "Tutorial-1")
+            if (SceneName == "Tutorial-1" || SceneName == "Level1")
             {
                 if (t != null)
                 {
@@ -140,14 +143,12 @@ public class KeyInventoryUI : MonoBehaviour
                     var labelRect = t.GetComponent<RectTransform>();
                     if (labelRect != null)
                     {
-                        // Small badge in the north‑west corner
                         labelRect.anchorMin = new Vector2(0f, 0.8f);
                         labelRect.anchorMax = new Vector2(0.35f, 1f);
                         labelRect.offsetMin = new Vector2(2f, 0f);
                         labelRect.offsetMax = new Vector2(-2f, -2f);
                         t.alignment = TextAlignmentOptions.TopLeft;
-                        t.enableWordWrapping = false;
-                        // Slightly larger K1/K2 labels for readability
+                        t.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
                         t.fontSize = 18f;
                     }
                 }
@@ -155,7 +156,6 @@ public class KeyInventoryUI : MonoBehaviour
                 var shapeIconGO = new GameObject("ShapeIcon");
                 shapeIconGO.transform.SetParent(b.transform, false);
                 var shapeRect = shapeIconGO.AddComponent<RectTransform>();
-                // Fill most of the button under the K label
                 shapeRect.anchorMin = new Vector2(0f, 0f);
                 shapeRect.anchorMax = new Vector2(1f, 0.75f);
                 shapeRect.offsetMin = new Vector2(2f, 2f);
@@ -163,18 +163,16 @@ public class KeyInventoryUI : MonoBehaviour
 
                 var shapeImage = shapeIconGO.AddComponent<Image>();
                 shapeImage.sprite = GetShapeSprite(kd.shape);
-                // Fill with tutorial yellow; sprite is white shape on top
                 shapeImage.color = new Color(1f, 0.84f, 0f);
                 shapeImage.preserveAspect = true;
             }
             else
             {
-                // Normal lanes: just show 1,2,3,4 as before
                 if (t != null)
                 {
                     t.text = (idx + 1).ToString();
                     t.alignment = TextAlignmentOptions.Center;
-                    t.enableWordWrapping = false;
+                    t.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
                 }
             }
             b.onClick.RemoveAllListeners();
@@ -211,7 +209,6 @@ public class KeyInventoryUI : MonoBehaviour
         }
 
         UpdateButtonsInteractable();
-        UpdateOpenPrompt();
     }
 
     IEnumerator FlashButton(Button btn)
@@ -247,16 +244,6 @@ public class KeyInventoryUI : MonoBehaviour
 
     Sprite GetShapeSprite(KeyHeadShape shape)
     {
-        // If sprites are wired in the inspector, prefer those.
-        switch (shape)
-        {
-            case KeyHeadShape.Circle:  if (circleSprite  != null) return circleSprite;  break;
-            case KeyHeadShape.Square:  if (squareSprite  != null) return squareSprite;  break;
-            case KeyHeadShape.Capsule: if (capsuleSprite != null) return capsuleSprite; break;
-            case KeyHeadShape.Cross:   if (crossSprite   != null) return crossSprite;   break;
-        }
-
-        // Otherwise, generate simple procedural sprites in code (cached).
         if (_generatedShapeSprites.TryGetValue(shape, out var cached))
             return cached;
 
@@ -264,7 +251,6 @@ public class KeyInventoryUI : MonoBehaviour
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
 
-        // Base: transparent
         var clear = new Color(0, 0, 0, 0);
         var col = Color.white;
 
@@ -288,10 +274,9 @@ public class KeyInventoryUI : MonoBehaviour
                         {
                             float rx = Mathf.Abs(nx);
                             float ry = Mathf.Abs(ny);
-                            if (ry <= 0.4f && rx <= 0.7f) c = col; // center bar
+                            if (ry <= 0.4f && rx <= 0.7f) c = col; 
                             else
                             {
-                                // rounded ends
                                 Vector2 leftCenter  = new Vector2(-0.7f, 0f);
                                 Vector2 rightCenter = new Vector2( 0.7f, 0f);
                                 if ((new Vector2(nx, ny) - leftCenter).sqrMagnitude  <= 0.4f * 0.4f ||
@@ -320,44 +305,54 @@ public class KeyInventoryUI : MonoBehaviour
     {
         if (!doorInRange) return;
 
-        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        bool correct = false;
+
+
+        if (SceneName == "Tutorial-1")
+        {
+            correct = KeyGenerator.Instance != null
+                && kd.shape == KeyGenerator.Instance.correctShape
+                && kd.color == KeyGenerator.Instance.correctColor;
+            if (correct && TutorialManager.Instance != null)
+                TutorialManager.Instance.OnCorrectKeyUsedAtDoor();
+            else
+            {
+                // once game manager is there should be cleaned up
+                /*if (GameLayout.Instance != null)
+                    GameLayout.Instance.ShowWrongKeyFeedback();
+                else*/ if (TutorialManager.Instance != null)
+                    TutorialManager.Instance.ShowPopup("Wrong key!", 2f);
+            }
+            return;
+        }
 
         if (GameManager.Instance == null) return;
 
         if (GameLayout.Instance != null)
             GameLayout.Instance.HideWrongFeedback();
 
-        bool correct = false;
 
-        Debug.Log("Key shape: " + kd.shape.ToString());
-        Debug.Log("Key color: " + kd.color.ToString());
-        Debug.Log("Key spinning: " + kd.spinning);
-        Debug.Log("Scene name: " + sceneName);
-
-        if (sceneName == "Level1-Lane1")
+        if (SceneName == "Level1" || SceneName == "Level2")
         {
-            Debug.Log("Correct shape: " + GameManager.Instance.lane1CorrectShape);
-            Debug.Log("Correct color: " + GameManager.Instance.lane1CorrectColor);
-            correct = kd.shape.ToString() == GameManager.Instance.lane1CorrectShape
-                   && kd.color.ToString() == GameManager.Instance.lane1CorrectColor;
-        }
-        else if (sceneName == "Level1-Lane2")
-        {
-            Debug.Log("Correct shape: " + GameManager.Instance.lane2CorrectShape);
-            Debug.Log("Correct color: " + GameManager.Instance.lane2CorrectColor);
-            Debug.Log("Correct spinning: " + GameManager.Instance.lane2CorrectKeySpinning);
-            correct = kd.shape.ToString() == GameManager.Instance.lane2CorrectShape
-                   && kd.color.ToString() == GameManager.Instance.lane2CorrectColor
-                   && kd.spinning == GameManager.Instance.lane2CorrectKeySpinning;
+            correct = KeyGenerator.Instance != null
+                   && kd.shape == KeyGenerator.Instance.correctShape
+                   && kd.color == KeyGenerator.Instance.correctColor;
         }
 
         GameManager.Instance.RecordKeyAttempt();
         if (correct)
         {
             Debug.Log($"Correct key! {kd.color} {kd.shape}");
-            if (openPromptUI != null)
-                openPromptUI.SetActive(false);
-            GameManager.Instance.LoadNextLane();
+
+            if (SceneName == "Tutorial-1" && TutorialManager.Instance != null)
+                TutorialManager.Instance.OnCorrectKeyUsedAtDoor();
+            else if (SceneName == "Level1" && UIManager.Instance != null)
+            {
+                HideKeybarPressArrow();
+                UIManager.Instance.ShowLevel1Complete();
+            }
+            else
+                GameManager.Instance.LoadNextLane();
         }
         else
         {
@@ -371,6 +366,7 @@ public class KeyInventoryUI : MonoBehaviour
             }
             else
             {
+                HideKeybarPressArrow();
                 foreach (Button b in spawnedButtons)
                     b.interactable = false;
                 GameManager.Instance.GameOver();
@@ -378,12 +374,19 @@ public class KeyInventoryUI : MonoBehaviour
         }
     }
 
+
     void UpdateButtonsInteractable()
     {
         bool all = (KeyInventory.Instance != null) && KeyInventory.Instance.HasAllKeys();
         bool canClick = doorInRange && all;
+        KeyButtonsInteractable = canClick;
         for (int i = 0; i < spawnedButtons.Count; i++)
             spawnedButtons[i].interactable = canClick;
+
+        if (SceneName == "Level1")
+            UpdateKeybarPressArrowVisibility(canClick);
+        else
+            HideKeybarPressArrow();
 
         if (canClick && keyBarParent != null)
         {
@@ -397,6 +400,30 @@ public class KeyInventoryUI : MonoBehaviour
             var rect = keyBarParent.GetComponent<RectTransform>();
             if (rect != null) rect.anchoredPosition = keyBarBasePos;
         }
+    }
+
+    void UpdateKeybarPressArrowVisibility(bool canClick)
+    {
+        if (!canClick)
+        {
+            HideKeybarPressArrow();
+            return;
+        }
+
+        if (_cachedPlayerTransform == null)
+        {
+            var p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) _cachedPlayerTransform = p.transform;
+        }
+
+        if (_cachedPlayerTransform == null) return;
+        _doorKeyArrowOverlay.Show();
+        _doorKeyArrowOverlay.Tick(_cachedPlayerTransform, keyBarParent);
+    }
+
+    void HideKeybarPressArrow()
+    {
+        _doorKeyArrowOverlay.Hide();
     }
 
     IEnumerator VibrateKeyBar()
@@ -414,5 +441,63 @@ public class KeyInventoryUI : MonoBehaviour
             rect.anchoredPosition = keyBarBasePos + new Vector2(offset, 0f);
             yield return null;
         }
+    }
+
+    public void HighlightButton(int index)
+    {
+        ClearHighlight();
+        if (index < 0 || index >= spawnedButtons.Count) return;
+
+        Button btn = spawnedButtons[index];
+
+        _highlightOverlay = new GameObject("HighlightBorder");
+        _highlightOverlay.transform.SetParent(btn.transform, false);
+        _highlightOverlay.transform.SetAsFirstSibling();
+
+        RectTransform rt = _highlightOverlay.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(-5f, -5f);
+        rt.offsetMax = new Vector2(5f, 5f);
+
+        Image img = _highlightOverlay.AddComponent<Image>();
+        img.color = new Color(1f, 0.84f, 0f, 0f);
+        img.raycastTarget = false;
+
+        _highlightCoroutine = StartCoroutine(PulseHighlight(img));
+    }
+
+    public void ClearHighlight()
+    {
+        if (_highlightCoroutine != null) { StopCoroutine(_highlightCoroutine); _highlightCoroutine = null; }
+        if (_highlightOverlay != null) { Destroy(_highlightOverlay); _highlightOverlay = null; }
+    }
+
+    IEnumerator PulseHighlight(Image img)
+    {
+        float t = 0f;
+        while (true)
+        {
+            t += Time.unscaledDeltaTime * 4f;
+            float alpha = (Mathf.Sin(t) + 1f) * 0.5f;
+            if (img != null)
+                img.color = new Color(1f, 0.84f, 0f, alpha * 0.85f);
+            yield return null;
+        }
+    }
+
+    public void ShowForTutorial()
+    {
+        if (keyBarParent != null)
+            keyBarParent.gameObject.SetActive(true);
+ 
+        Refresh();
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+        _doorKeyArrowOverlay.Dispose();
     }
 }
