@@ -271,7 +271,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5374216903823037535}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.6058, y: 1.88522, z: 21.908}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -536,6 +536,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrapZoneController
   traptype: beam
   beam: {fileID: 4768575619086475572}
+  keepBeamVisible: 0
+  mode: tutorial
   riseHeight: 5
   riseSpeed: 4
   delayBetweenObjects: 0.2
@@ -666,8 +668,8 @@ CapsuleCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 1
-  m_ProvidesContacts: 1
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
   m_Radius: 0.5000001

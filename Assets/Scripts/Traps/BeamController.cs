@@ -38,10 +38,10 @@ public class BeamController : MonoBehaviour
             {
                 distance = hit.distance;
 
-                if (hit.collider.CompareTag("Player"))
-                {
-                    Debug.Log("Hit Player from beam index: " + i);
-                }
+                //if (hit.collider.CompareTag("Player"))
+                //{
+                //    Debug.Log("Hit Player from beam index: " + i);
+                //}
             }
 
             UpdateLaserVisual(i, distance);
@@ -53,12 +53,12 @@ public class BeamController : MonoBehaviour
         Transform laser = laserVisual[index];
 
         Vector3 scale = laser.localScale;
-        scale.z = distance;
+        scale.z = distance * 1.5f;
         laser.localScale = scale;
 
         Vector3 pos = laser.localPosition;
-        pos.z = distance / 2f;
-        laser.localPosition = pos;
+        pos.z = distance/2f;
+        //laser.localPosition = pos;
     }
 
     void FlickerEffect()

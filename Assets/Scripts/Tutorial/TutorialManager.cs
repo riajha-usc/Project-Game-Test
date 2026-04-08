@@ -13,16 +13,25 @@ public class TutorialManager : MonoBehaviour
     [Tooltip("The door the player must reach. Tag it 'Door' or assign manually.")]
     public Transform doorTransform;
 
-    [Tooltip("The intro canvas panel (Image + MainText + StartButton). Shown on load, hidden on start.")]
-    public GameObject introPanel;
+    /* [Tooltip("The intro canvas panel (Image + MainText + StartButton). Shown on load, hidden on start.")]
+    public GameObject introPanel; */
 
-    public GameObject startMenu;
+    // public GameObject startMenu;
 
     [Tooltip("Key TutorialEnd canvas panel — shown when player completes the key collection part of the tutorial.")]
     public GameObject keyTutorialEnd;
 
     [Tooltip("Clue TutorialEnd canvas panel — shown when the correct key is used at the door.")]
     public GameObject clueTutorialEnd;
+
+    [Tooltip("Common game over screen used in tutorials.")]
+    public GameObject gameOverScreen;
+
+    [Tooltip("Shown as the text on tutorial end screen.")]
+    public string completionText = "Tutorial complete.";
+
+    [Tooltip("Label on the Load Next button")]
+    public string continueButtonLabel = "Next Tutorial";
 
     [Header("Popup Settings")]
     public float autoCloseDelay = 3f;
@@ -60,11 +69,30 @@ public class TutorialManager : MonoBehaviour
     Coroutine _showDoorArrowsCoroutine;
     bool _doorUiShownWhenEnabled;
 
-    enum ArrowTarget { None, KeyBar, Door, KeyButton, Clue }
+    enum ArrowTarget { None, KeyBar, Door, KeyButton, Clue, WorldObject }
 
     bool _clueOpened;
     GameObject _clueBoxGO;
     ClueBox _clueBox;
+
+    [Header("Trap Tutorial References")]
+    public Transform trapPill1;
+    public Transform trapSpikeZone;
+    public Transform trapBeamZone;
+    public Transform trapSafeZone;
+
+    [Header("Trap Phase Panels")]
+    public GameObject trapPhase1End;
+    public GameObject trapPhase2End;
+
+    private Transform _worldArrowTarget;
+    private int _trapAgentsCollected;
+    private bool _spikeDeactivated;
+    private bool _beamDeactivated;
+    private bool _trapPhase1Continued;
+    private bool _trapPhase2Continued;
+
+    static readonly Color LevelCompleteGreen = new Color(60f / 255f, 1f, 110f / 255f, 1f);
 
     void Awake()
     {
@@ -76,6 +104,9 @@ public class TutorialManager : MonoBehaviour
     {
         BuildPopupUI();
         BuildArrowUI();
+        ConfigureTutorialGameOverScreen();
+        if (trapPhase1End != null) trapPhase1End.SetActive(false);
+        if (trapPhase2End != null) trapPhase2End.SetActive(false);
 
         if (doorTransform == null)
         {
@@ -83,14 +114,82 @@ public class TutorialManager : MonoBehaviour
             if (doorGO != null) doorTransform = doorGO.transform;
         }
 
-        if (introPanel != null)
+        /* if (introPanel != null)
         {
             Time.timeScale = 0f;
             introPanel.SetActive(true);
         }
         else
-        {
+        {*/
             OnStartPressed();
+        //}
+    }
+
+    void ConfigureTutorialGameOverScreen()
+    {
+        if (gameOverScreen == null) return;
+
+        gameOverScreen.SetActive(false);
+
+        WireTutorialGameOverButtons();
+        ApplyTutorialGameOverTexts();
+    }
+
+    void WireTutorialGameOverButtons()
+    {
+        if (gameOverScreen == null) return;
+
+        foreach (var btn in gameOverScreen.GetComponentsInChildren<Button>(true))
+        {
+            if (btn == null) continue;
+
+            string n = btn.gameObject.name;
+            btn.onClick.RemoveAllListeners();
+
+            if (n == "LoadMainMenu")
+                btn.onClick.AddListener(OnTutorialMainMenuPressed);
+            else if (n == "LoadNext")
+                btn.onClick.AddListener(OnNextTutorialPressed);
+            else if (n == "RestartButton")
+                btn.onClick.AddListener(OnRestartTutorialPressed);
+        }
+    }
+
+    void ApplyTutorialGameOverTexts()
+    {
+        if (gameOverScreen == null) return;
+
+        Transform titleTf = gameOverScreen.transform.Find("Text (TMP)");
+        if (titleTf != null)
+        {
+            TMP_Text title = titleTf.GetComponent<TMP_Text>();
+            if (title != null)
+            {
+                title.fontStyle = FontStyles.Bold;
+                title.text = completionText;
+                title.color = LevelCompleteGreen;
+            }
+        }
+
+        foreach (var btn in gameOverScreen.GetComponentsInChildren<Button>(true))
+        {
+            if (btn == null) continue;
+
+            TMP_Text label = btn.GetComponentInChildren<TMP_Text>(true);
+            if (label == null) continue;
+
+            switch (btn.gameObject.name)
+            {
+                case "LoadMainMenu":
+                    label.text = "Main Menu";
+                    break;
+                case "LoadNext":
+                    label.text = continueButtonLabel;
+                    break;
+                case "RestartButton":
+                    label.text = "Restart";
+                    break;
+            }
         }
     }
 
@@ -154,10 +253,8 @@ public class TutorialManager : MonoBehaviour
         if (_gameStarted) return;
         _gameStarted = true;
 
-        if (introPanel != null)
-            introPanel.SetActive(false);
-        if (startMenu != null)
-            startMenu.SetActive(false);
+        /* if (introPanel != null)
+            introPanel.SetActive(false); */
 
         Time.timeScale = 1f;
 
@@ -170,7 +267,7 @@ public class TutorialManager : MonoBehaviour
             if (tutorialType == "keys")
                 ShowPopup("Observe key shapes\n pass through, to collect.", 5f);
             if (tutorialType == "traps")
-                ShowPopup("Analyze the traps, Assess your movements, and proceed carefully", 3.5f);
+                StartCoroutine(TrapTutorialSequence());
         }
     }
 
@@ -251,6 +348,23 @@ public class TutorialManager : MonoBehaviour
         _clueBox.OnClueOpenedEvent += () => _clueOpened = true;
     }
 
+    IEnumerator WaitUntilNearPoint(Vector3 point, float threshold)
+    {
+        Transform player = null;
+        while (player == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) player = p.transform;
+            yield return null;
+        }
+        while (true)
+        {
+            if (Vector3.Distance(player.position, point) <= threshold)
+                yield break;
+            yield return null;
+        }
+    }
+
     IEnumerator WaitUntilNearClue(float threshold)
     {
         Transform player = null;
@@ -284,52 +398,7 @@ public class TutorialManager : MonoBehaviour
 
     void BuildPopupUI()
     {
-        _popupRoot = new GameObject("TutorialPopup");
-        _popupRoot.transform.SetParent(null);
-        DontDestroyOnLoad(_popupRoot);
-
-        Canvas canvas = _popupRoot.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 50;
-
-        CanvasScaler scaler = _popupRoot.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0.5f;
-
-        GameObject panel = new GameObject("PopupPanel");
-        panel.transform.SetParent(_popupRoot.transform, false);
-        RectTransform panelRect = panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.4f, 0.52f);
-        panelRect.anchorMax = new Vector2(0.6f, 0.57f);
-        panelRect.offsetMin = Vector2.zero;
-        panelRect.offsetMax = Vector2.zero;
-
-        var bgImage = panel.AddComponent<Image>();
-        bgImage.color = new Color(0f, 0f, 0f, 0.8f);
-
-        GameObject textGO = new GameObject("Text");
-        textGO.transform.SetParent(panel.transform, false);
-        RectTransform textRect = textGO.AddComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
-
-        _popupText = textGO.AddComponent<TextMeshProUGUI>();
-        if (_popupText != null)
-        {
-            _popupText.fontSize = 22;
-            _popupText.color = Color.white;
-            _popupText.fontStyle = FontStyles.Bold;
-            _popupText.alignment = TextAlignmentOptions.Center;
-            _popupText.textWrappingMode = TextWrappingModes.Normal;
-            if (TMP_Settings.defaultFontAsset != null)
-                _popupText.font = TMP_Settings.defaultFontAsset;
-        }
-
-        _popupRoot.SetActive(false);
+        _popupRoot = PopupMsgs.Create(out _popupText, "TutorialPopup");
     }
 
     void BuildArrowUI()
@@ -411,7 +480,7 @@ public class TutorialManager : MonoBehaviour
         if (_arrowTarget == ArrowTarget.None || !_arrowCanvas.activeSelf) return;
 
         if (_arrowLineRoot != null)
-            _arrowLineRoot.SetActive(_arrowTarget == ArrowTarget.KeyBar || _arrowTarget == ArrowTarget.Clue);
+            _arrowLineRoot.SetActive(_arrowTarget == ArrowTarget.KeyBar || _arrowTarget == ArrowTarget.Clue || _arrowTarget == ArrowTarget.WorldObject);
 
         if (_arrowTarget == ArrowTarget.KeyBar)
             UpdateKeyBarArrow();
@@ -419,6 +488,8 @@ public class TutorialManager : MonoBehaviour
             UpdateKeyButtonArrow();
         else if (_arrowTarget == ArrowTarget.Clue)
             UpdateClueArrow();
+        else if (_arrowTarget == ArrowTarget.WorldObject)
+            UpdateWorldObjectArrow();
     }
 
     void UpdateKeyButtonArrow()
@@ -700,16 +771,246 @@ public class TutorialManager : MonoBehaviour
         {
             clueTutorialEnd.SetActive(true);
 
-            // Wire up any buttons to return to main menu
-            foreach (var btn in clueTutorialEnd.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+            if (clueTutorialEnd == gameOverScreen)
             {
-                btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() =>
-                {
-                    Time.timeScale = 1f;
-                    SceneManager.LoadScene("MainMenu-Scene");
-                });
+                WireTutorialGameOverButtons();
+                ApplyTutorialGameOverTexts();
             }
+            else
+            {
+                foreach (var btn in clueTutorialEnd.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                {
+                    btn.onClick.RemoveAllListeners();
+                    btn.onClick.AddListener(() =>
+                    {
+                        Time.timeScale = 1f;
+                        MenuManager.LoadMainMenu();
+                    });
+                }
+            }
+        }
+    }
+
+    public void ShowTutorialGameOver()
+    {
+        HideTutorialPopup();
+        HideTutorialArrow();
+
+        Time.timeScale = 0f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        GameObject p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null)
+        {
+            var ctrl = p.GetComponent<CharacterController>();
+            if (ctrl != null) ctrl.enabled = false;
+        }
+
+        if (gameOverScreen != null)
+        {
+            WireTutorialGameOverButtons();
+            ApplyTutorialGameOverTexts();
+            gameOverScreen.SetActive(true);
+        }
+    }
+
+    public void OnTutorialMainMenuPressed()
+    {
+        Time.timeScale = 1f;
+        MenuManager.LoadMainMenu();
+    }
+
+    public void OnNextTutorialPressed()
+    {
+        Time.timeScale = 1f;
+        MenuManager.LoadNextScene();
+    }
+
+    public void OnRestartTutorialPressed()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    public void OnTrapAgentCollected()
+    {
+        if (tutorialType != "traps") return;
+        _trapAgentsCollected++;
+    }
+
+    // Called by zone controllers when F is successfully pressed
+    public void OnTrapDeactivated(string trapType)
+    {
+        if (tutorialType != "traps") return;
+        if (trapType == "spikes") _spikeDeactivated = true;
+        if (trapType == "beam")   _beamDeactivated  = true;
+    }
+
+    public void OnTrapPhase1NextPressed()
+    {
+        if (trapPhase1End != null) trapPhase1End.SetActive(false);
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        _trapPhase1Continued = true;
+    }
+
+    public void OnTrapPhase2NextPressed()
+    {
+        if (trapPhase2End != null) trapPhase2End.SetActive(false);
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        _trapPhase2Continued = true;
+    }
+
+    void WirePhasePanelButtons(GameObject panel, UnityEngine.Events.UnityAction action)
+    {
+        if (panel == null) return;
+        foreach (var btn in panel.GetComponentsInChildren<Button>(true))
+        {
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(action);
+        }
+    }
+
+    void ShowWorldArrow(Transform target)
+    {
+        _worldArrowTarget = target;
+        ShowArrow(ArrowTarget.WorldObject);
+    }
+
+    void UpdateWorldObjectArrow()
+    {
+        if (_worldArrowTarget == null || Camera.main == null) return;
+
+        Vector3 screenRaw = Camera.main.WorldToScreenPoint(_worldArrowTarget.position);
+        if (screenRaw.z < 0f) screenRaw = -screenRaw;
+
+        float margin = 100f;
+        Vector2 targetScreen = new Vector2(
+            Mathf.Clamp(screenRaw.x, margin, Screen.width  - margin),
+            Mathf.Clamp(screenRaw.y, margin, Screen.height - margin));
+
+        Vector2 lineStart = new Vector2(Screen.width * 0.5f, Screen.height * 0.35f);
+        Vector2 dir = targetScreen - lineStart;
+        float length = dir.magnitude;
+        if (length < 1f) return;
+        dir /= length;
+
+        float pad = Mathf.Min(ARROW_ENDPOINT_PADDING, length * 0.35f);
+        Vector2 startPadded = lineStart + dir * pad;
+        Vector2 endPadded   = targetScreen - dir * pad;
+
+        float march = (Time.time * 1.4f) % 1f;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+        for (int i = 0; i < _arrowLineDashes.Count; i++)
+        {
+            float t     = ((i + march) / _arrowLineDashes.Count) % 1f;
+            float alpha = Mathf.Lerp(0.15f, 1.0f, t);
+            Vector2 pos = Vector2.Lerp(startPadded, endPadded, t);
+
+            var dash = _arrowLineDashes[i];
+            dash.gameObject.SetActive(true);
+            dash.position  = new Vector3(pos.x, pos.y, 0f);
+            dash.rotation  = Quaternion.Euler(0f, 0f, angle);
+            dash.sizeDelta = new Vector2(28f, 8f);
+            if (i < _arrowLineDashImages.Count)
+                _arrowLineDashImages[i].color = new Color(1f, 1f, 1f, alpha);
+            if (i < _arrowLineShadows.Count)
+            {
+                var shadowRT = _arrowLineShadows[i].GetComponent<RectTransform>();
+                shadowRT.position  = new Vector3(pos.x + 2f, pos.y - 2f, 0f);
+                shadowRT.rotation  = Quaternion.Euler(0f, 0f, angle);
+                shadowRT.sizeDelta = new Vector2(30f, 10f);
+                _arrowLineShadows[i].color = new Color(0f, 0f, 0f, alpha * 0.45f);
+            }
+        }
+
+        RectTransform arrowRect = _arrowObject.GetComponent<RectTransform>();
+        arrowRect.sizeDelta = new Vector2(72f, 72f);
+        arrowRect.position = new Vector3(endPadded.x, endPadded.y, 0f);
+        _arrowObject.transform.rotation = Quaternion.Euler(0f, 0f, angle - 90f);
+        if (_arrowImg != null) _arrowImg.color = Color.white;
+    }
+
+    IEnumerator TrapTutorialSequence()
+    {
+        ShowPopup("Watch out! Dodge the traps!", 3f);
+        yield return new WaitForSeconds(3.5f);
+
+        // Step 1 — collect the single agent (covers both traps)
+        if (trapPill1 != null)
+        {
+            ShowPopup("Collect the Deactivating Agent!", 0f);
+            ShowWorldArrow(trapPill1);
+            yield return new WaitUntil(() => _trapAgentsCollected >= 1);
+            HideTutorialPopup();
+            HideTutorialArrow();
+        }
+
+        yield return new WaitForSeconds(0.5f);
+
+        // Step 2 — enter spike zone and press F
+        _spikeDeactivated = false;
+        ShowPopup("Go near the spikes and press F to deactivate!", 0f);
+        if (trapSpikeZone != null) ShowWorldArrow(trapSpikeZone);
+        yield return new WaitUntil(() => _spikeDeactivated);
+        HideTutorialPopup();
+        HideTutorialArrow();
+        yield return new WaitForSeconds(1.2f);
+
+        // Phase 1 panel — spikes done, introduce beam
+        if (trapPhase1End != null)
+        {
+            _trapPhase1Continued = false;
+            Time.timeScale = 0f;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            WirePhasePanelButtons(trapPhase1End, OnTrapPhase1NextPressed);
+            trapPhase1End.SetActive(true);
+            yield return new WaitUntil(() => _trapPhase1Continued);
+        }
+
+        yield return new WaitForSeconds(0.5f);
+
+        _beamDeactivated = false;
+        ShowPopup("Go near the beam and press F to deactivate!", 0f);
+        if (trapBeamZone != null) ShowWorldArrow(trapBeamZone);
+        yield return new WaitUntil(() => _beamDeactivated);
+        HideTutorialPopup();
+        HideTutorialArrow();
+        yield return new WaitForSeconds(1.8f); // wait for beam lowering animation
+
+        // Phase 2 panel — beam done, restore health
+        if (trapPhase2End != null)
+        {
+            _trapPhase2Continued = false;
+            Time.timeScale = 0f;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            WirePhasePanelButtons(trapPhase2End, OnTrapPhase2NextPressed);
+            trapPhase2End.SetActive(true);
+            yield return new WaitUntil(() => _trapPhase2Continued);
+        }
+
+        yield return new WaitForSeconds(0.4f);
+
+        if (trapSafeZone != null)
+        {
+            ShowWorldArrow(trapSafeZone);
+            yield return StartCoroutine(WaitUntilNearPoint(trapSafeZone.position, 3f));
+            HideTutorialArrow();
+        }
+
+        yield return new WaitForSeconds(4.5f); 
+
+        if (doorTransform != null)
+        {
+            ShowPopup("Navigate to the door!", 0f);
+            ShowWorldArrow(doorTransform);
         }
     }
 

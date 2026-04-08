@@ -13,6 +13,18 @@ public class MovDividerController : MonoBehaviour
     public Color damageColor = new Color(1f, 0.3f, 0.3f);
     public float pulseSpeed = 2f;
 
+    const float DividerHitAnalyticsCooldown = 0.35f;
+    float _nextDividerHitAnalyticsUnscaledTime = -999f;
+
+    void TryRecordDividerHitAnalytics()
+    {
+        if (GameManager.Instance == null) return;
+        float now = Time.unscaledTime;
+        if (now < _nextDividerHitAnalyticsUnscaledTime) return;
+        _nextDividerHitAnalyticsUnscaledTime = now + DividerHitAnalyticsCooldown;
+        GameManager.Instance.RecordDividerHit();
+    }
+
     private void Start()
     {
         startPosition = transform.position;
@@ -29,9 +41,17 @@ public class MovDividerController : MonoBehaviour
         rend.material.color = Color.Lerp(baseColor, damageColor, pulse * 0.5f);
     }
 
+    void OnTriggerEnter(Collider other)
+    {
+        if (!other.CompareTag("Player")) return;
+        if (SafeZoneController.InSafeZone) return;
+        TryRecordDividerHitAnalytics();
+    }
+
     private void OnTriggerStay(Collider other)
     {
         if (!other.CompareTag("Player")) return;
+        if (SafeZoneController.InSafeZone) return;
 
         PlayerMovement3D player = other.GetComponent<PlayerMovement3D>();
         if (player == null) return;
@@ -43,10 +63,11 @@ public class MovDividerController : MonoBehaviour
 
         if (Physics.Raycast(other.transform.position, pushDirection, out hit, checkDistance))
         {
-            if (!hit.collider.CompareTag("Divider") || !hit.collider.CompareTag("Wall")) 
+            if (!hit.collider.CompareTag("Divider") || !hit.collider.CompareTag("Wall"))
                 // Akshith bro you have to add tags to walls and dividers
             {
                 player.hp = Mathf.Max(0f, player.hp - collisionDamage * Time.deltaTime);
+                TryRecordDividerHitAnalytics();
             }
         }
     }

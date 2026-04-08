@@ -29,8 +29,8 @@ public class ClueBoxGenerator : MonoBehaviour
 
     private static readonly BoxPlacement[] LANE2_PLACEMENTS = new BoxPlacement[]
     {
-        new BoxPlacement(new Vector3(-2.77f, 1.5f,  12.0f), Quaternion.Euler(0f, 270f, 0f)),
-        new BoxPlacement(new Vector3( 2.77f, 1.5f, 23.0f), Quaternion.Euler(0f,  90f, 0f)),
+        new BoxPlacement(new Vector3(-2.77f, 1.5f, 17.0f), Quaternion.Euler(0f, 270f, 0f)),
+        new BoxPlacement(new Vector3( 2.77f, 1.45f, 35.5f), Quaternion.Euler(0f,  90f, 0f)),
     };
 
     private static readonly BoxPlacement[] LANE3_PLACEMENTS = new BoxPlacement[]
@@ -41,7 +41,7 @@ public class ClueBoxGenerator : MonoBehaviour
     };
     private static readonly BoxPlacement[] LEVEL1_PLACEMENT = new BoxPlacement[]
     {
-        new BoxPlacement(new Vector3(1.9f, 1.5f, 13.717f), Quaternion.Euler(0f, 2.067f, 0f)),
+        new BoxPlacement(new Vector3(1.8f, 1.8f, 13.8f), Quaternion.Euler(0f, 2.067f, 0f)),
     };
 
     public void SpawnForScene(string sceneName, List<string> clues = null)
@@ -109,7 +109,7 @@ public class ClueBoxGenerator : MonoBehaviour
         ClueBox cb = root.AddComponent<ClueBox>();
         cb.clueText        = clueText;
         cb.clueIndex       = index;
-        cb.interactionRange = 4.0f;
+        cb.interactionRange = 2.0f;
 
         return root;
     }

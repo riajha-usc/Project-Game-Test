@@ -1,31 +1,6 @@
 using System.Collections;
 using UnityEngine;
 
-/// <summary>
-/// Fire Divider Trap
-///
-/// Attach directly to any existing Divider object in Lane 1
-/// (e.g. Dividers_Left_01, Dividers_Right_03, etc.)
-///
-/// SETUP STEPS:
-/// 1. Select a Divider GameObject in the Lane1 scene hierarchy.
-/// 2. On its BoxCollider → tick "Is Trigger" = TRUE
-///    (so the player can overlap it and receive fire damage).
-/// 3. On its MeshRenderer → assign your Fire Material (the one you will create).
-/// 4. Attach this script (FireDividerController) to the same GameObject.
-/// 5. Also attach FireUVScroll to the same GameObject so the fire texture animates.
-/// 6. Set Inspector values:
-///    - moveAxis    : X  (slides left-right across the corridor)
-///    - leftBound   : set to the left limit in LOCAL x  (e.g. -2.5)
-///    - rightBound  : set to the right limit in LOCAL x  (e.g.  2.5)
-///      TIP: the gap between the divider edge and the corridor wall is where
-///           the player passes through — size the bounds so the divider
-///           never fully blocks the corridor on either side.
-///    - moveSpeed   : 1.8  (slow enough to dodge)
-///    - pauseAtBound: 1.2  (pause at each end so player has a window to cross)
-///    - damagePerSecond: 30
-///    - fireParticle: (optional) assign a Particle System child for extra fire FX
-/// </summary>
 public class FireDividerController : MonoBehaviour
 {
     public enum MoveAxis { X, Z }
@@ -85,6 +60,7 @@ public class FireDividerController : MonoBehaviour
             if (damageTimer >= 0.5f)
             {
                 playerInContact.hp = Mathf.Max(0f, playerInContact.hp - (damagePerSecond * 0.5f));
+                GameManager.Instance?.RecordDividerHit();
                 damageTimer = 0f;
             }
         }
@@ -106,7 +82,10 @@ public class FireDividerController : MonoBehaviour
 
         // Immediate hit on first contact
         if (playerInContact != null && !SafeZoneController.InSafeZone)
+        {
             playerInContact.hp = Mathf.Max(0f, playerInContact.hp - (damagePerSecond * 0.5f));
+            GameManager.Instance?.RecordDividerHit();
+        }
     }
 
     void OnTriggerExit(Collider other)

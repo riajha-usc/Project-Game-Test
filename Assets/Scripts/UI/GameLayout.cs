@@ -11,6 +11,7 @@ public class GameLayout : MonoBehaviour
     public static GameLayout Instance { get; private set; }
 
     [Header("Optional: Assign in Editor to use existing UI")]
+    public TMP_Text levelTitleText;
     public TMP_Text cluesProgressText;
     public TMP_Text attemptsProgressText;
 
@@ -23,6 +24,7 @@ public class GameLayout : MonoBehaviour
     GameObject wrongKeyFeedbackObj;
     Coroutine wrongKeyFeedbackCoroutine;
     GameObject controlsPanel;
+    GameObject levelTitleRoot;
 
     void Awake()
     {
@@ -36,8 +38,13 @@ public class GameLayout : MonoBehaviour
 
     void Start()
     {
+        if (rootRect == null)
+            rootRect = GetComponent<RectTransform>();
+
         if (buildUIAtRuntime)
             BuildHUDUI();
+        else if (levelTitleText == null)
+            BuildLevelTitle();
 
         // ReparentHealthBarToTopLeft();
         nextUpdate = Time.unscaledTime + updateInterval;
@@ -63,6 +70,9 @@ public class GameLayout : MonoBehaviour
 
     public void Refresh()
     {
+        string scene = SceneManager.GetActiveScene().name;
+        ApplyLevelTitleForScene(scene);
+
         if (GameManager.Instance == null) return;
 
         if (cluesProgressText != null)
@@ -76,7 +86,6 @@ public class GameLayout : MonoBehaviour
 
         if (attemptsProgressText != null)
         {
-            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             int used = scene == "Level1-Lane3" ? GameManager.Instance.codeAttemptCount : GameManager.Instance.keyAttemptCount;
             int max = GameManager.Instance.GetMaxAttemptsForCurrentLane();
             attemptsProgressText.text = $"Unlock Attempts: <color=#5B9BD5><b>{used}/{max}</b></color>";
@@ -174,6 +183,8 @@ public class GameLayout : MonoBehaviour
             if (canvas == null) return;
         }
 
+        BuildLevelTitle();
+
         // Clues 
         var cluesObj = new GameObject("CluesText");
         cluesObj.transform.SetParent(rootRect, false);
@@ -205,6 +216,55 @@ public class GameLayout : MonoBehaviour
         Refresh();
     }
 
+    void BuildLevelTitle()
+    {
+        if (levelTitleText != null) return;
+        if (rootRect == null)
+            rootRect = GetComponent<RectTransform>();
+        if (rootRect == null) return;
+
+        levelTitleRoot = new GameObject("LevelTitle");
+        levelTitleRoot.transform.SetParent(rootRect, false);
+        var levelRect = levelTitleRoot.AddComponent<RectTransform>();
+        levelRect.anchorMin = new Vector2(0.5f, 1f);
+        levelRect.anchorMax = new Vector2(0.5f, 1f);
+        levelRect.pivot = new Vector2(0.5f, 1f);
+        levelRect.anchoredPosition = new Vector2(0f, -16f);
+        levelRect.sizeDelta = new Vector2(220f, 36f);
+
+        levelTitleText = CreateText(levelTitleRoot.transform, "Level 1", 28);
+        levelTitleText.fontStyle = FontStyles.Bold;
+        levelTitleText.alignment = TextAlignmentOptions.Center;
+        levelTitleText.textWrappingMode = TextWrappingModes.NoWrap;
+        // Lighter than clues/attempts: less padding + lower alpha so it does not dominate the top bar
+        AddLightBackground(levelTitleRoot, 6f, 0.42f);
+    }
+
+    static string GetLevelTitleForScene(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName)) return null;
+        if (sceneName == "Level1" || sceneName.StartsWith("Level1")) return "Level 1";
+        if (sceneName == "Level2" || sceneName.StartsWith("Level2")) return "Level 2";
+        if (sceneName == "Level3" || sceneName.StartsWith("Level3")) return "Level 3";
+        return null;
+    }
+
+    void ApplyLevelTitleForScene(string sceneName)
+    {
+        if (levelTitleText == null) return;
+        string title = GetLevelTitleForScene(sceneName);
+        GameObject root = levelTitleRoot != null ? levelTitleRoot : levelTitleText.transform.parent?.gameObject;
+        if (title != null)
+        {
+            levelTitleText.text = title;
+            if (root != null) root.SetActive(true);
+        }
+        else if (root != null)
+        {
+            root.SetActive(false);
+        }
+    }
+
     void BuildControlsPanel()
     {
         // Top-left controls hint panel
@@ -229,7 +289,7 @@ public class GameLayout : MonoBehaviour
         r1.offsetMin = new Vector2(8f, 0f);
         r1.offsetMax = new Vector2(-8f, 0f);
         var t1 = line1.AddComponent<TextMeshProUGUI>();
-        t1.text = "<color=#AAAAAA>Move:</color>  <b>W A D</b>";
+        t1.text = "<color=#AAAAAA>Move:</color>  <b>W A S D</b>";
         t1.fontSize = 20;
         t1.color = Color.white;
         t1.alignment = TextAlignmentOptions.Left;
@@ -246,7 +306,7 @@ public class GameLayout : MonoBehaviour
         r2.offsetMin = new Vector2(8f, 0f);
         r2.offsetMax = new Vector2(-8f, 0f);
         var t2 = line2.AddComponent<TextMeshProUGUI>();
-        t2.text = "<color=#AAAAAA>Select Key:</color>  <b>Mouse Click</b>";
+        t2.text = "<color=#AAAAAA>Deactivate Traps:</color>  <b>F</b>";
         t2.fontSize = 20;
         t2.color = Color.white;
         t2.alignment = TextAlignmentOptions.Left;
@@ -255,9 +315,7 @@ public class GameLayout : MonoBehaviour
             t2.font = TMP_Settings.defaultFontAsset;
     }
 
-    static Sprite roundedSprite;
-
-    void AddLightBackground(GameObject parent, float padding)
+    void AddLightBackground(GameObject parent, float padding, float alpha = 0.92f)
     {
         var bg = new GameObject("Background");
         bg.transform.SetParent(parent.transform, false);
@@ -268,37 +326,7 @@ public class GameLayout : MonoBehaviour
         bgRect.offsetMin = new Vector2(-padding, -padding);
         bgRect.offsetMax = new Vector2(padding, padding);
         var img = bg.AddComponent<Image>();
-        img.color = new Color(0.08f, 0.08f, 0.1f, 0.92f);
-        img.sprite = GetRoundedSprite();
-    }
-
-    Sprite GetRoundedSprite()
-    {
-        if (roundedSprite != null) return roundedSprite;
-        int w = 64, h = 32;
-        float r = 8f;
-        var tex = new Texture2D(w, h);
-        tex.filterMode = FilterMode.Bilinear;
-        tex.wrapMode = TextureWrapMode.Clamp;
-        for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            float px = x + 0.5f, py = y + 0.5f;
-            bool inCenter = px >= r && px < w - r && py >= r && py < h - r;
-            bool inCorner = (px < r || px >= w - r) && (py < r || py >= h - r);
-            bool inside = inCenter;
-            if (!inside && inCorner)
-            {
-                float cx = px < r ? r : w - r - 0.5f;
-                float cy = py < r ? r : h - r - 0.5f;
-                inside = (px - cx) * (px - cx) + (py - cy) * (py - cy) <= r * r;
-            }
-            else if (!inside) inside = true;
-            tex.SetPixel(x, y, inside ? Color.white : Color.clear);
-        }
-        tex.Apply();
-        roundedSprite = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
-        return roundedSprite;
+        img.color = new Color(0.08f, 0.08f, 0.1f, alpha);
     }
 
     TMP_Text CreateText(Transform parent, string content, int fontSize)

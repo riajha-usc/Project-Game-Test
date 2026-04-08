@@ -21,6 +21,9 @@ public class SafeZoneController : MonoBehaviour
         player = other.GetComponent<PlayerMovement3D>();
         if (player == null) return;
 
+        if (InSafeZone)
+            return;
+
         //if (usagesUsed >= maxUsage)
         //{
         //    TutorialManager.Instance.ShowPopup($"Can be Used ({maxUsage}) Times", 3.5f);
@@ -29,10 +32,13 @@ public class SafeZoneController : MonoBehaviour
 
         InSafeZone = true;
 
-        if (mode == "tutorial")
+        if (GameManager.Instance != null)
+            GameManager.Instance.RecordSafeZoneEntry();
+
+        if (mode == "tutorial" && TutorialManager.Instance != null)
         {
             TutorialManager.Instance.ShowPopup(
-                "Recovers 40% of your max health",
+                "You are in the Safe Zone!\nRecovers 40% of your health.",
                 4f
             );
         }

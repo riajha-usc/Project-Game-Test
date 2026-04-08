@@ -15,10 +15,19 @@ public class KeyInventoryUI : MonoBehaviour
     bool doorInRange = false;
     Coroutine flashCoroutine;
     Coroutine vibrateCoroutine;
+    Coroutine _hintPopupCoroutine;
     Vector2 keyBarBasePos;
 
     GameObject _highlightOverlay;
     Coroutine _highlightCoroutine;
+    Coroutine _sequenceRevealCoroutine;
+    readonly List<Image> _sequenceShapeIcons = new List<Image>();
+    readonly List<TMP_Text> _buttonLabels = new List<TMP_Text>();
+    bool _sequenceRevealInProgress;
+    bool _sequenceVRevealUsed;
+    const KeyCode SEQUENCE_REVEAL_KEY = KeyCode.V;
+    GameObject _hintPopupRoot;
+    TMP_Text _hintPopupText;
 
     readonly DoorKeyArrowOverlay _doorKeyArrowOverlay = new DoorKeyArrowOverlay();
     Transform _cachedPlayerTransform;
@@ -31,6 +40,14 @@ public class KeyInventoryUI : MonoBehaviour
 
     public bool KeyButtonsInteractable { get; private set; }
     string SceneName => SceneManager.GetActiveScene().name;
+
+    public string GetSequenceRevealUsedForAnalytics()
+    {
+        if (SceneName == "Level2")
+            return _sequenceVRevealUsed ? "Yes" : "No";
+        return "N/A";
+    }
+    bool UsesDoorSequenceReveal => SceneName == "Level2" || SceneName == "Level3";
 
     Dictionary<KeyHeadShape, Sprite> _generatedShapeSprites = new Dictionary<KeyHeadShape, Sprite>();
 
@@ -54,7 +71,22 @@ public class KeyInventoryUI : MonoBehaviour
             _doorKeyArrowOverlay.Tick(_cachedPlayerTransform, keyBarParent);
 
         if (KeyInventory.Instance == null || KeyInventory.Instance.keys.Count == 0) return;
-        if (!doorInRange || !KeyInventory.Instance.HasAllKeys()) return;
+        bool hasAllKeys = KeyInventory.Instance.HasAllKeys();
+
+        if (UsesDoorSequenceReveal && doorInRange && hasAllKeys && Input.GetKeyDown(SEQUENCE_REVEAL_KEY))
+        {
+            HidePopUp();
+            if (_sequenceVRevealUsed)
+            {
+                ShowPopup("You already used the sequence hint.", 2.5f);
+                return;
+            }
+            if (TryDoorSequenceRevealWithAttemptCost())
+                _sequenceVRevealUsed = true;
+            return;
+        }
+
+        if (!doorInRange || !hasAllKeys) return;
 
         if (Input.GetKeyDown(KeyCode.Alpha1)) { NotifyTutorialKeyUsed(); TryUnlockWithKeyAtIndex(0); }
         else if (Input.GetKeyDown(KeyCode.Alpha2)) { NotifyTutorialKeyUsed(); TryUnlockWithKeyAtIndex(1); }
@@ -112,6 +144,13 @@ public class KeyInventoryUI : MonoBehaviour
             StopCoroutine(flashCoroutine);
             flashCoroutine = null;
         }
+        if (_sequenceRevealCoroutine != null)
+        {
+            StopCoroutine(_sequenceRevealCoroutine);
+            _sequenceRevealCoroutine = null;
+        }
+        _sequenceShapeIcons.Clear();
+        _buttonLabels.Clear();
         if (keysText != null)
             keysText.transform.SetParent(keyBarParent, true);
 
@@ -126,6 +165,9 @@ public class KeyInventoryUI : MonoBehaviour
 
         if (KeyInventory.Instance == null) return;
 
+        if (UsesDoorSequenceReveal && !KeyInventory.Instance.HasAllKeys())
+            _sequenceVRevealUsed = false;
+
         var list = KeyInventory.Instance.keys;
 
         for (int i = 0; i < list.Count; i++)
@@ -135,7 +177,7 @@ public class KeyInventoryUI : MonoBehaviour
             Button b = Instantiate(keyButtonTemplate, keyBarParent);
             b.gameObject.SetActive(true);
             TMP_Text t = b.GetComponentInChildren<TMP_Text>(true);
-            if (SceneName == "Tutorial-1" || SceneName == "Level1")
+            if (SceneName == "Tutorial-1" || SceneName == "Level1" || SceneName == "Level2")
             {
                 if (t != null)
                 {
@@ -152,6 +194,7 @@ public class KeyInventoryUI : MonoBehaviour
                         t.fontSize = 18f;
                     }
                 }
+                _buttonLabels.Add(t);
 
                 var shapeIconGO = new GameObject("ShapeIcon");
                 shapeIconGO.transform.SetParent(b.transform, false);
@@ -165,6 +208,9 @@ public class KeyInventoryUI : MonoBehaviour
                 shapeImage.sprite = GetShapeSprite(kd.shape);
                 shapeImage.color = new Color(1f, 0.84f, 0f);
                 shapeImage.preserveAspect = true;
+
+                if (UsesDoorSequenceReveal)
+                    _sequenceShapeIcons.Add(shapeImage);
             }
             else
             {
@@ -209,6 +255,125 @@ public class KeyInventoryUI : MonoBehaviour
         }
 
         UpdateButtonsInteractable();
+
+        if (UsesDoorSequenceReveal && _sequenceShapeIcons.Count > 0)
+        {
+            _sequenceRevealCoroutine = StartCoroutine(HideKeySequenceAfterIntro());
+            if (list.Count == 1)
+                ShowKeySequenceCollectionPrompt();
+        }
+    }
+
+    IEnumerator HideKeySequenceAfterIntro()
+    {
+        int last = _sequenceShapeIcons.Count - 1;
+        for (int i = 0; i < _sequenceShapeIcons.Count; i++)
+        {
+            bool iconVisible = i == last;
+            if (_sequenceShapeIcons[i] != null)
+                _sequenceShapeIcons[i].gameObject.SetActive(iconVisible);
+            if (i < _buttonLabels.Count && _buttonLabels[i] != null)
+            {
+                _buttonLabels[i].gameObject.SetActive(true);
+                ApplyKeySequenceLabelStyle(_buttonLabels[i], iconVisible);
+            }
+        }
+
+        yield return new WaitForSeconds(1f);
+
+        if (last >= 0 && last < _sequenceShapeIcons.Count && _sequenceShapeIcons[last] != null)
+            _sequenceShapeIcons[last].gameObject.SetActive(false);
+
+        if (last >= 0 && last < _buttonLabels.Count)
+        {
+            if (_buttonLabels[last] != null)
+            {
+                _buttonLabels[last].gameObject.SetActive(true);
+                ApplyKeySequenceLabelStyle(_buttonLabels[last], false);
+            }
+        }
+
+        _sequenceRevealCoroutine = null;
+    }
+
+    void ShowKeySequenceCollectionPrompt()
+    {
+        ShowPopup("Remember the key shape sequence.", 3f);
+    }
+
+    void ShowPopup(string message, float duration)
+    {
+        if (TutorialManager.Instance != null)
+        {
+            TutorialManager.Instance.ShowPopup(message, duration);
+            return;
+        }
+
+        EnsureHintPopupUI();
+        if (_hintPopupText != null)
+            _hintPopupText.text = message;
+        if (_hintPopupRoot != null)
+            _hintPopupRoot.SetActive(true);
+
+        if (_hintPopupCoroutine != null)
+        {
+            StopCoroutine(_hintPopupCoroutine);
+            _hintPopupCoroutine = null;
+        }
+
+        if (duration > 0f)
+            _hintPopupCoroutine = StartCoroutine(HideHintPopupAfter(duration));
+    }
+
+    public void HidePopUp()
+    {
+        if (_hintPopupCoroutine != null)
+        {
+            StopCoroutine(_hintPopupCoroutine);
+            _hintPopupCoroutine = null;
+        }
+        if (_hintPopupRoot != null)
+            _hintPopupRoot.SetActive(false);
+    }
+
+    void EnsureHintPopupUI()
+    {
+        if (_hintPopupRoot != null) return;
+        _hintPopupRoot = PopupMsgs.Create(out _hintPopupText, "LevelHintPopup");
+    }
+
+    IEnumerator HideHintPopupAfter(float seconds)
+    {
+        yield return new WaitForSecondsRealtime(seconds);
+        if (_hintPopupRoot != null)
+            _hintPopupRoot.SetActive(false);
+        _hintPopupCoroutine = null;
+    }
+
+    void ApplyKeySequenceLabelStyle(TMP_Text label, bool iconVisible)
+    {
+        if (label == null) return;
+        RectTransform labelRect = label.GetComponent<RectTransform>();
+        if (labelRect == null) return;
+
+        if (iconVisible)
+        {
+            labelRect.anchorMin = new Vector2(0f, 0.8f);
+            labelRect.anchorMax = new Vector2(0.35f, 1f);
+            labelRect.offsetMin = new Vector2(2f, 0f);
+            labelRect.offsetMax = new Vector2(-2f, -2f);
+            label.alignment = TextAlignmentOptions.TopLeft;
+            label.fontSize = 18f;
+        }
+        else
+        {
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            label.alignment = TextAlignmentOptions.Center;
+            label.fontSize = 20f;
+        }
     }
 
     IEnumerator FlashButton(Button btn)
@@ -305,6 +470,11 @@ public class KeyInventoryUI : MonoBehaviour
     {
         if (!doorInRange) return;
 
+        if (GameLayout.Instance != null)
+            GameLayout.Instance.HideWrongFeedback();
+        if (TutorialManager.Instance != null)
+            TutorialManager.Instance.HideTutorialPopup();
+
         bool correct = false;
 
 
@@ -332,7 +502,7 @@ public class KeyInventoryUI : MonoBehaviour
             GameLayout.Instance.HideWrongFeedback();
 
 
-        if (SceneName == "Level1" || SceneName == "Level2")
+        if (SceneName == "Level1" || UsesDoorSequenceReveal)
         {
             correct = KeyGenerator.Instance != null
                    && kd.shape == KeyGenerator.Instance.correctShape
@@ -346,10 +516,10 @@ public class KeyInventoryUI : MonoBehaviour
 
             if (SceneName == "Tutorial-1" && TutorialManager.Instance != null)
                 TutorialManager.Instance.OnCorrectKeyUsedAtDoor();
-            else if (SceneName == "Level1" && UIManager.Instance != null)
+            else if (SceneName == "Level1" || SceneName == "Level2" && UIManager.Instance != null)
             {
                 HideKeybarPressArrow();
-                UIManager.Instance.ShowLevel1Complete();
+                UIManager.Instance.ShowLevelComplete();
             }
             else
                 GameManager.Instance.LoadNextLane();
@@ -358,12 +528,9 @@ public class KeyInventoryUI : MonoBehaviour
         {
             Debug.Log($"Wrong key: {kd.color} {kd.shape}");
             GameManager.Instance.RecordIncorrectKey();
-            int max = GameManager.Instance.GetMaxAttemptsForCurrentLane();
-            if (GameManager.Instance.incorrectKeyCount < max)
-            {
-                if (GameLayout.Instance != null)
-                    GameLayout.Instance.ShowWrongKeyFeedback();
-            }
+            int max = 2;
+            if (GameManager.Instance.keyAttemptCount < max)
+                ShowPopup("Wrong key!", 2f);
             else
             {
                 HideKeybarPressArrow();
@@ -400,6 +567,60 @@ public class KeyInventoryUI : MonoBehaviour
             var rect = keyBarParent.GetComponent<RectTransform>();
             if (rect != null) rect.anchoredPosition = keyBarBasePos;
         }
+
+        if (UsesDoorSequenceReveal)
+            ShowDoorSequenceRevealHint(all, canClick);
+    }
+
+    void ShowDoorSequenceRevealHint(bool hasAllKeys, bool canClick)
+    {
+        if (!hasAllKeys)
+            return;
+
+        if (canClick)
+        {
+            if (!_sequenceVRevealUsed)
+                ShowPopup("If you're stuck, press V to view sequence, costs 1 attempt", 0f);
+        }
+    }
+
+    bool TryDoorSequenceRevealWithAttemptCost()
+    {
+        if (_sequenceRevealInProgress || GameManager.Instance == null || KeyInventory.Instance == null)
+            return false;
+
+        _sequenceRevealInProgress = true;
+        GameManager.Instance.RecordKeyAttempt();
+
+        int max = GameManager.Instance.GetMaxAttemptsForCurrentLane();
+        if (GameManager.Instance.keyAttemptCount >= max)
+        {
+            foreach (Button b in spawnedButtons)
+                b.interactable = false;
+            _sequenceRevealInProgress = false;
+            GameManager.Instance.GameOver();
+            return false;
+        }
+
+        StartCoroutine(RevealKeySequenceAtDoor());
+        return true;
+    }
+
+    IEnumerator RevealKeySequenceAtDoor()
+    {
+        for (int i = 0; i < _sequenceShapeIcons.Count; i++)
+            if (_sequenceShapeIcons[i] != null)
+                _sequenceShapeIcons[i].gameObject.SetActive(true);
+        for (int i = 0; i < _buttonLabels.Count; i++)
+            if (_buttonLabels[i] != null)
+            {
+                _buttonLabels[i].gameObject.SetActive(true);
+                ApplyKeySequenceLabelStyle(_buttonLabels[i], true);
+            }
+
+        yield return new WaitForSeconds(0.9f);
+
+        _sequenceRevealInProgress = false;
     }
 
     void UpdateKeybarPressArrowVisibility(bool canClick)
@@ -498,6 +719,12 @@ public class KeyInventoryUI : MonoBehaviour
     {
         if (Instance == this)
             Instance = null;
+        if (_sequenceRevealCoroutine != null)
+            StopCoroutine(_sequenceRevealCoroutine);
+        if (_hintPopupCoroutine != null)
+            StopCoroutine(_hintPopupCoroutine);
+        if (_hintPopupRoot != null)
+            Destroy(_hintPopupRoot);
         _doorKeyArrowOverlay.Dispose();
     }
 }

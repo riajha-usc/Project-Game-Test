@@ -3,33 +3,55 @@ using UnityEngine.SceneManagement;
 
 public class MenuManager : MonoBehaviour
 {
-    public void OnKeyTutorialPressed()
+    static void LoadSceneWithEntryMode(string sceneName, bool fromMainMenu)
     {
-        SceneManager.LoadScene("Tutorial-1");
+        if (GameManager.Instance != null)
+        {
+            if (fromMainMenu)
+                GameManager.Instance.PrepareEntryFromMainMenu();
+            else
+                GameManager.Instance.PrepareNextLevelFromProgression();
+        }
+
+        SceneManager.LoadScene(sceneName);
     }
 
-    public void OnTrapTutorialPressed()
-    {
-        SceneManager.LoadScene("Traps-Prototype");
-    }
+    public static void LoadTutorialKey() => LoadSceneWithEntryMode("Tutorial-1", fromMainMenu: true);
+    public static void LoadTrapsPrototype() => LoadSceneWithEntryMode("Traps-Prototype", fromMainMenu: true);
+    public static void LoadLevel1(bool fromMainMenu = true) => LoadSceneWithEntryMode("Level1", fromMainMenu);
+    public static void LoadLevel2(bool fromMainMenu = true) => LoadSceneWithEntryMode("Level2", fromMainMenu);
+    public static void LoadLevel3(bool fromMainMenu = true) => LoadSceneWithEntryMode("Level3", fromMainMenu);
 
-    public void OnLevel1Pressed()
-    {
-        SceneManager.LoadScene("Level1");
-    }
+    public static void LoadMainMenu() => SceneManager.LoadScene("MainMenu-Scene");
 
-    public void OnLevel2Pressed()
-    {
-        SceneManager.LoadScene("Level2");
-    }
+    public void OnKeyTutorialPressed() => LoadTutorialKey();
+    public void OnTrapTutorialPressed() => LoadTrapsPrototype();
+    public void OnLevel1Pressed() => LoadLevel1();
+    public void OnLevel2Pressed() => LoadLevel2();
+    public void OnLevel3Pressed() => LoadLevel3();
+    public void StartMenuPressed() => LoadMainMenu();
 
-    public void OnLevel3Pressed()
+    public static void LoadNextScene()
     {
-        SceneManager.LoadScene("Level3");
-    }
+        var current = SceneManager.GetActiveScene().name;
 
-    public void StartMenuPressed()
-    {
-        SceneManager.LoadScene("MainMenu-Scene");
+        switch (current)
+        {
+            case "Tutorial-1":
+                LoadSceneWithEntryMode("Traps-Prototype", fromMainMenu: false);
+                return;
+            case "Traps-Prototype":
+                LoadLevel1(fromMainMenu: false);
+                return;
+            case "Level1":
+                LoadLevel2(fromMainMenu: false);
+                return;
+            case "Level2":
+                LoadLevel3(fromMainMenu: false);
+                return;
+            default:
+                LoadMainMenu();
+                return;
+        }
     }
 }

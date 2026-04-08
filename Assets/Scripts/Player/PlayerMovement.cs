@@ -8,7 +8,7 @@ public class PlayerMovement3D : MonoBehaviour
 {
     public float speed = 5f;
     public float gravity = -9.81f;
-    public float rotationSpeed = 3f;
+    public float rotationSpeed = 1f;
 
     private CharacterController controller;
     private Vector3 velocity;
@@ -20,21 +20,24 @@ public class PlayerMovement3D : MonoBehaviour
 
     [Header("Health")]
     public Rigidbody rb;
-    public float hp = 200f;
+    public float hp = 100f;
     public Slider healthbar;
     public TMP_Text healthtxt;
     public float maxHp = 0f;
     private bool isDead = false;
 
-
     void Awake()
     {
         controller = GetComponent<CharacterController>();
         if (rb == null) rb = GetComponent<Rigidbody>();
-        if (rb != null) rb.freezeRotation = true;
+        if (rb != null){
+            rb.freezeRotation = true;
+            rb.isKinematic = true;
+            rb.useGravity = true;
+        }
     }
 
-    void OnEnable()  { SceneManager.sceneLoaded += OnSceneLoaded; }
+    void OnEnable() { SceneManager.sceneLoaded += OnSceneLoaded; }
     void OnDisable() { SceneManager.sceneLoaded -= OnSceneLoaded; }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -58,6 +61,11 @@ public class PlayerMovement3D : MonoBehaviour
         }
         spawnPosition = transform.position;
         spawnRotation = transform.rotation;
+        CameraController cam = Camera.main.GetComponent<CameraController>();
+        if (cam != null)
+        {
+            cam.SetPlayer(transform);
+        }
     }
 
     void Start()
@@ -70,7 +78,7 @@ public class PlayerMovement3D : MonoBehaviour
         }
 
         if (maxHp <= 0f)
-            maxHp = 200f;
+            maxHp = 100f;
 
         hp = maxHp;
         isDead = false;
@@ -80,21 +88,32 @@ public class PlayerMovement3D : MonoBehaviour
 
     void Update()
     {
+        if (healthbar != null)
+        {
+            healthbar.gameObject.SetActive(true);
+        }
         Die();
         if (healthtxt != null) healthtxt.text = Mathf.RoundToInt(hp) + " / " + Mathf.RoundToInt(maxHp);
         if (healthbar != null) healthbar.value = hp / maxHp;
 
-        float x = Input.GetAxisRaw("Horizontal");
-        float z = Mathf.Max(0, Input.GetAxis("Vertical"));
+        //float x = Input.GetAxisRaw("Horizontal");
+        float z = Input.GetAxis("Vertical");
 
-        if (Mathf.Abs(x) < 0.15f) x = 0;
+        //if (Mathf.Abs(x) < 0.15f) x = 0;
         if (Mathf.Abs(z) < 0.15f) z = 0;
 
         // Player-relative: W = forward (where player faces), S = back, A/D = strafe
-        Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
-        Vector3 right = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
-        Vector3 move = (forward * z + right * x).normalized;
+        //Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+        //Vector3 right = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
+        //Vector3 move = (forward * z + right * x).normalized;
 
+        float rotationInput = Input.GetAxisRaw("Horizontal"); // A/D
+        float forwardInput = Input.GetAxis("Vertical"); // W/S
+
+        transform.Rotate(0f, rotationInput * 120f * Time.deltaTime, 0f);
+
+        // Move forward in facing direction
+        Vector3 move = transform.forward * forwardInput;
         // Gravity
         if (controller.isGrounded && velocity.y < 0)
             velocity.y = -2f;
@@ -107,11 +126,11 @@ public class PlayerMovement3D : MonoBehaviour
         }
 
         // Rotate player toward movement direction
-        if (move.sqrMagnitude > 0.01f)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(move);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Mathf.Clamp01(rotationSpeed * Time.deltaTime));
-        }
+        //if (move.sqrMagnitude > 0.01f)
+        //{
+        //    Quaternion targetRotation = Quaternion.LookRotation(move);
+        //    transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Mathf.Clamp01(rotationSpeed * Time.deltaTime));
+        //}
 
         if (GameManager.Instance != null &&
             GameManager.Instance.currentState == GameManager.GameState.Start &&
@@ -126,13 +145,15 @@ public class PlayerMovement3D : MonoBehaviour
     {
         if (hp <= 0.001f && !isDead)
         {
-            isDead = true;
-            if (TutorialManager.Instance != null &&
-                TutorialManager.Instance.tutorialType == "traps")
+            // In a trap tutorial, don't kill the player — reset health and warn them
+            if (TutorialManager.Instance != null && TutorialManager.Instance.tutorialType == "traps")
             {
-                SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                hp = maxHp;
+                TutorialManager.Instance.ShowPopup("You got hurt! Deactivate the traps first!", 3f);
                 return;
             }
+
+            isDead = true;
 
             if (GameManager.Instance != null)
             {
@@ -151,4 +172,5 @@ public class PlayerMovement3D : MonoBehaviour
     {
         hp = Mathf.Max(0f, hp - amount);
     }
+
 }

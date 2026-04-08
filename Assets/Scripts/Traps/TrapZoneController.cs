@@ -7,10 +7,8 @@ public class TrapZoneController : MonoBehaviour
     public static bool InTrapZone = false;
     public string traptype = string.Empty;
     public GameObject beam;
-    public bool keepBeamVisible = true;
+    public bool keepBeamVisible = false;
     public string mode = "default";
-    //public GameObject FrontShield;
-    //public GameObject BackShield;
 
     [Header("Animation Settings")]
     public float riseHeight = 5f;
@@ -20,19 +18,57 @@ public class TrapZoneController : MonoBehaviour
     private Vector3 beamHiddenPos;
     private Vector3 beamVisiblePos;
 
-    //private Vector3 frontHiddenPos;
-    //private Vector3 frontVisiblePos;
-
-    //private Vector3 backHiddenPos;
-    //private Vector3 backVisiblePos;
+    private bool playerInsideZone = false;
+    private bool trapTemporarilyDisabled = false;
 
     private Coroutine activeRoutine;
 
     private void Start()
     {
         SetupObject(beam, out beamHiddenPos, out beamVisiblePos);
-        //SetupObject(FrontShield, out frontHiddenPos, out frontVisiblePos);
-        //SetupObject(BackShield, out backHiddenPos, out backVisiblePos);
+
+        if (traptype == "beam")
+        {
+            beam.transform.position = beamVisiblePos;
+            beam.SetActive(true);
+            beam.GetComponent<BeamController>()?.ActivateBeam();
+        }
+    }
+
+    private void Update()
+    {
+        if (!playerInsideZone) return;
+
+        if (Input.GetKeyDown(KeyCode.F) && !trapTemporarilyDisabled)
+        {
+            if (TrapCombatAgentManager.TryActivate("beam", 5f))
+            {
+                TutorialManager.Instance?.OnTrapDeactivated("beam");
+                if (activeRoutine != null)
+                    StopCoroutine(activeRoutine);
+
+                activeRoutine = StartCoroutine(DisableTrapWhileAgentActive());
+            }
+            else if (mode == "tutorial" && TutorialManager.Instance != null)
+            {
+                TutorialManager.Instance.ShowPopup("You need a Deactivating Agent first.", 2.5f);
+            }
+        }
+    }
+
+    private IEnumerator DisableTrapWhileAgentActive()
+    {
+        trapTemporarilyDisabled = true;
+
+        yield return StartCoroutine(DeActivateTrap());
+
+        yield return new WaitUntil(() => !TrapCombatAgentManager.IsActiveFor("beam"));
+
+        if (playerInsideZone)
+            yield return StartCoroutine(ActivateTrap());
+
+        trapTemporarilyDisabled = false;
+        activeRoutine = null;
     }
 
     private void SetupObject(GameObject obj, out Vector3 hidden, out Vector3 visible)
@@ -54,36 +90,36 @@ public class TrapZoneController : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
-        {
-            InTrapZone = true;
-            if(mode == "tutorial")
-            {
-                TutorialManager.Instance.ShowPopup("Watch out for the Laser Beam!", 3.5f);
-            }
-            if (activeRoutine != null)
-                StopCoroutine(activeRoutine);
+        if (!other.CompareTag("Player"))
+            return;
 
-            activeRoutine = StartCoroutine(ActivateTrap());
+        InTrapZone = true;
+        playerInsideZone = true;
+
+        if (mode == "tutorial" && TutorialManager.Instance != null)
+        {
+            TutorialManager.Instance.HideTutorialArrow();
         }
+
+        if (!trapTemporarilyDisabled)
+            return; // beam is already visible; only re-activate if it was F-key disabled
+
+        if (activeRoutine != null)
+            StopCoroutine(activeRoutine);
+
+        activeRoutine = StartCoroutine(ActivateTrap());
     }
 
     private void OnTriggerExit(Collider other)
     {
-        if (other.CompareTag("Player"))
-        {
-            InTrapZone = false;
+        if (!other.CompareTag("Player"))
+            return;
 
-            if (activeRoutine != null)
-                StopCoroutine(activeRoutine);
+        InTrapZone = false;
+        playerInsideZone = false;
 
-            activeRoutine = StartCoroutine(DeActivateTrap());
-            string sceneName = SceneManager.GetActiveScene().name;
-            if(sceneName == "Traps-Prototype" && TutorialManager.Instance != null)
-            {
-                TutorialManager.Instance.ShowPopup("Congrats you made it!", 3.5f);
-            }
-        }
+        // Don't hide/lower the beam on exit — beam stays always visible
+
     }
 
     private void OnDisable()
@@ -96,11 +132,6 @@ public class TrapZoneController : MonoBehaviour
         if (traptype != "beam")
             yield break;
 
-        //yield return StartCoroutine(RaiseObject(FrontShield, frontHiddenPos, frontVisiblePos));
-        //yield return new WaitForSeconds(delayBetweenObjects);
-
-        //yield return StartCoroutine(RaiseObject(BackShield, backHiddenPos, backVisiblePos));
-        //yield return new WaitForSeconds(delayBetweenObjects);
 
         if (keepBeamVisible)
         {
@@ -130,11 +161,6 @@ public class TrapZoneController : MonoBehaviour
             if (beam != null)
                 beam.transform.position = beamVisiblePos;
         }
-
-        //yield return StartCoroutine(LowerObject(BackShield, backVisiblePos, backHiddenPos));
-        //yield return new WaitForSeconds(delayBetweenObjects);
-
-        //yield return StartCoroutine(LowerObject(FrontShield, frontVisiblePos, frontHiddenPos));
     }
 
     private IEnumerator RaiseObject(GameObject obj, Vector3 from, Vector3 to)

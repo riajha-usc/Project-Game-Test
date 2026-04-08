@@ -8,6 +8,9 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
 
+    static readonly Dictionary<int, float> _spikeGroupLastAnalyticsHitUnscaled = new Dictionary<int, float>();
+    const float SpikeGroupHitAnalyticsDebounceSeconds = 0.35f;
+
     [Header("Level Settings")]
     public string levelStartSceneName;
 
@@ -24,6 +27,11 @@ public class GameManager : MonoBehaviour
     HashSet<int> readClueIndices = new HashSet<int>();
     [HideInInspector] public float levelStartTime;
     [HideInInspector] public float levelCompleteTime;
+    [HideInInspector] public int safeZoneEntryCount;
+    [HideInInspector] public int clueZoneEntryCount;
+    [HideInInspector] public int beamHitsCount;
+    [HideInInspector] public int spikesHitsCount;
+    [HideInInspector] public int dividerHitsCount;
 
     [Header("Key Data (persisted across lanes)")]
     [HideInInspector] public string levelCorrectShape;
@@ -40,6 +48,7 @@ public class GameManager : MonoBehaviour
     }
 
     public GameState currentState = GameState.Start;
+    bool _skipStartScreenOnReload;
 
     void Awake()
     {
@@ -54,17 +63,26 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void Start()
-    {
-        Time.timeScale = 0f;
-    }
-
     public void StartGame()
     {
         currentState = GameState.Playing;
         Time.timeScale = 1f;
-        sessionId = System.DateTime.Now.Ticks;
+        // sessionId is set in PrepareEntryFromMainMenu only; progression keeps the same id.
+        if (sessionId == 0L)
+            sessionId = System.DateTime.Now.Ticks;
         levelStartTime = Time.unscaledTime;
+    }
+
+    public void PrepareEntryFromMainMenu()
+    {
+        currentState = GameState.Start;
+        levelCompleteTime = 0f;
+        sessionId = System.DateTime.Now.Ticks;
+    }
+
+    public void PrepareNextLevelFromProgression()
+    {
+        currentState = GameState.Playing;
     }
 
     public void RecordIncorrectKey()
@@ -93,6 +111,52 @@ public class GameManager : MonoBehaviour
             cluesSolved++;
     }
 
+    public void RecordSafeZoneEntry()
+    {
+        safeZoneEntryCount++;
+    }
+
+    public void RecordClueZoneEntry()
+    {
+        clueZoneEntryCount++;
+    }
+
+    public void RecordBeamHit()
+    {
+        beamHitsCount++;
+    }
+
+    public void RecordSpikeHitForGroup(int spikeGroupRootInstanceId)
+    {
+        if (spikeGroupRootInstanceId == 0) return;
+        float now = Time.unscaledTime;
+        if (_spikeGroupLastAnalyticsHitUnscaled.TryGetValue(spikeGroupRootInstanceId, out float prev)
+            && now - prev < SpikeGroupHitAnalyticsDebounceSeconds)
+            return;
+        _spikeGroupLastAnalyticsHitUnscaled[spikeGroupRootInstanceId] = now;
+        spikesHitsCount++;
+    }
+
+    static void ClearSpikeGroupHitDebounceState()
+    {
+        _spikeGroupLastAnalyticsHitUnscaled.Clear();
+    }
+
+    public void RecordDividerHit()
+    {
+        dividerHitsCount++;
+    }
+
+    public void SubmitLevelAnalytics(bool won)
+    {
+        levelCompleteTime = Time.unscaledTime - levelStartTime;
+
+        var sendToGoogle = GetComponent<SendToGoogle>();
+        Debug.Log("SendToGoogle: " + sendToGoogle != null);
+        if (sendToGoogle != null)
+            sendToGoogle.Send(won);
+    }
+
     public void GameOver()
     {
         if (currentState == GameState.GameOver)
@@ -105,9 +169,8 @@ public class GameManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible   = true;
 
-        var sendToGoogle = GetComponent<SendToGoogle>();
-        if (sendToGoogle != null)
-            sendToGoogle.Send();
+
+        SubmitLevelAnalytics(false);
 
         if (UIManager.Instance != null)
         {
@@ -115,7 +178,11 @@ public class GameManager : MonoBehaviour
         }
         if (GameLayout.Instance != null)
             GameLayout.Instance.HideWrongFeedback();
-        foreach (var lane3 in FindObjectsOfType<Lane3DoorInteraction>())
+
+        if (TutorialManager.Instance != null)
+            TutorialManager.Instance.HideTutorialPopup();
+
+        foreach (var lane3 in FindObjectsByType<Lane3DoorInteraction>(FindObjectsSortMode.None))
         {
             lane3.CloseInputPanel();
             lane3.HidePrompt();
@@ -132,22 +199,32 @@ public class GameManager : MonoBehaviour
 
     IEnumerator RestartLevelCoroutine()
     {
-        currentState = GameState.Start;
+        _skipStartScreenOnReload = true;
+        currentState = GameState.Playing;
         lanesCompleted = 0;
+        TrapCombatAgentManager.ResetAll();
         incorrectKeyCount = 0;
         incorrectCodeCount = 0;
         keyAttemptCount = 0;
         codeAttemptCount = 0;
         cluesSolved = 0;
         readClueIndices.Clear();
+        clueZoneEntryCount = 0;
+        beamHitsCount = 0;
+        spikesHitsCount = 0;
+        dividerHitsCount = 0;
+        ClearSpikeGroupHitDebounceState();
 
         Time.timeScale = 1f;
 
         yield return null;
 
-        AsyncOperation op = !string.IsNullOrEmpty(levelStartSceneName)
-            ? SceneManager.LoadSceneAsync(levelStartSceneName)
-            : SceneManager.LoadSceneAsync(0);
+        //AsyncOperation op = !string.IsNullOrEmpty(levelStartSceneName)
+        //    ? SceneManager.LoadSceneAsync(levelStartSceneName)
+        //    : SceneManager.LoadSceneAsync(0);
+
+        string sceneToReload = SceneManager.GetActiveScene().name;
+        AsyncOperation op = SceneManager.LoadSceneAsync(sceneToReload);
 
         if (op != null)
         {
@@ -158,41 +235,43 @@ public class GameManager : MonoBehaviour
 
     public void LoadNextLane()
     {
-        currentState = GameState.Playing;
         lanesCompleted++;
 
-        int currentIndex = SceneManager.GetActiveScene().buildIndex;
-        int nextIndex = currentIndex + 1;
+        string currentScene = SceneManager.GetActiveScene().name;
 
-        if (nextIndex < SceneManager.sceneCountInBuildSettings)
+        if (currentScene == "Level1")
         {
-            SceneManager.LoadScene(nextIndex);
+            MenuManager.LoadLevel2(fromMainMenu: false);
+            return;
         }
-        else
+
+        if (currentScene == "Level2")
         {
-            levelCompleteTime = Time.unscaledTime - levelStartTime;
-            Debug.Log("No more lanes. Level complete!");
-            Time.timeScale = 0f;
-            if (GameLayout.Instance != null)
-            {
-                GameLayout.Instance.HideWrongFeedback();
-                GameLayout.Instance.Refresh();
-            }
-            foreach (var lane3 in FindObjectsOfType<Lane3DoorInteraction>())
-            {
-                lane3.CloseInputPanel();
-                lane3.HidePrompt();
-            }
-             if (UIManager.Instance != null)
-                UIManager.Instance.ShowVictoryScreen();
-
-            var sendToGoogle = GetComponent<SendToGoogle>();
-            if (sendToGoogle != null)
-                sendToGoogle.Send();
-
+            MenuManager.LoadLevel3(fromMainMenu: false);
+            return;
         }
+
+        levelCompleteTime = Time.unscaledTime - levelStartTime;
+        Debug.Log("No more levels!");
+
+        Time.timeScale = 0f;
+
+        if (GameLayout.Instance != null)
+        {
+            GameLayout.Instance.HideWrongFeedback();
+            GameLayout.Instance.Refresh();
+        }
+
+        foreach (var lane3 in FindObjectsByType<Lane3DoorInteraction>(FindObjectsSortMode.None))
+        {
+            lane3.CloseInputPanel();
+            lane3.HidePrompt();
+        }
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowVictoryScreen();
+
     }
-
     public float GetLevelTimeSeconds()
     {
         if (currentState == GameState.GameOver)
@@ -217,7 +296,6 @@ public class GameManager : MonoBehaviour
     public int GetMaxAttemptsForCurrentLane()
     {
         string scene = SceneManager.GetActiveScene().name;
-        if (scene == "Level1-Lane1") return 1;
         // Tutorial has unlimited attempts – handled by TutorialKeyDeductionManager
         return 2;
     }
@@ -234,11 +312,17 @@ public class GameManager : MonoBehaviour
 
     void EnsureSingleEventSystem()
     {
-        var eventSystems = FindObjectsOfType<EventSystem>();
+        var eventSystems = FindObjectsByType<EventSystem>(FindObjectsSortMode.None);
         for (int i = 1; i < eventSystems.Length; i++)
         {
             Destroy(eventSystems[i].gameObject);
         }
+    }
+
+    static bool IsGameplayLevelScene(string sceneName)
+    {
+        return sceneName == "Level1" || sceneName == "Level2" || sceneName == "Level3"
+            || sceneName == "Tutorial-1" || sceneName == "Traps-Prototype";
     }
 
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -246,17 +330,46 @@ public class GameManager : MonoBehaviour
 
         EnsureSingleEventSystem();
 
+        if (currentState == GameState.GameOver && IsGameplayLevelScene(scene.name))
+        {
+            currentState = GameState.Start;
+            levelCompleteTime = 0f;
+        }
+        TrapCombatAgentManager.ResetAll();
         cluesSolved = 0;
         readClueIndices.Clear();
         incorrectKeyCount = 0;
         incorrectCodeCount = 0;
         keyAttemptCount = 0;
         codeAttemptCount = 0;
+        safeZoneEntryCount = 0;
+        clueZoneEntryCount = 0;
+        beamHitsCount = 0;
+        spikesHitsCount = 0;
+        dividerHitsCount = 0;
+        ClearSpikeGroupHitDebounceState();
 
-
-        if (currentState == GameState.Start && UIManager.Instance != null)
+        if (IsGameplayLevelScene(scene.name) && currentState == GameState.Playing)
         {
-            UIManager.Instance.ShowStartScreen();
+            levelStartTime = Time.unscaledTime;
+            levelCompleteTime = 0f;
+        }
+
+        if (_skipStartScreenOnReload)
+        {
+            _skipStartScreenOnReload = false;
+            currentState = GameState.Playing;
+            if (UIManager.Instance != null)
+                UIManager.Instance.HideStartScreen();
+            else
+                Time.timeScale = 1f;
+        }
+        else if (currentState == GameState.Start && UIManager.Instance != null)
+        {
+            if (UIManager.Instance.startScreen != null)
+                UIManager.Instance.ShowStartScreen();
+            else
+                UIManager.Instance.HideStartScreen();
         }
         else if (currentState == GameState.Start)
         {
@@ -270,6 +383,9 @@ public class GameManager : MonoBehaviour
         }
 
         Time.timeScale = (currentState == GameState.Playing) ? 1f : 0f;
+        if (scene.name == "MainMenu-Scene")
+            Time.timeScale = 1f;
+
         if (PlayerSpawnPoint.Instance != null)
         {
             GameObject player = GameObject.FindGameObjectWithTag("Player");
@@ -286,6 +402,13 @@ public class GameManager : MonoBehaviour
 
                 if (controller != null)
                     controller.enabled = true;
+
+                // Reset player health / damage state here
+                var pl = player.GetComponent<PlayerMovement3D>();
+                if (pl != null)
+                {
+                    pl.hp = pl.maxHp;
+                }
             }
         }
     }

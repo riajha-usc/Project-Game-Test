@@ -12,10 +12,13 @@ public class UIManager : MonoBehaviour
     public GameObject mainMenuButton;
 
     [Header("UI Screens")]
+    [Tooltip("If unset, gameplay begins as soon as the scene loads (no Start button).")]
     public GameObject startScreen;
     public GameObject gameOverScreen;
     [Tooltip("Optional: title text on game over screen. Used for both Game Over and You have won!")]
     public TMP_Text gameOverTitleText;
+    [Tooltip("Next Level button inside gameOverScreen — hidden on failure, shown on level complete.")]
+    public GameObject nextLevelButton;
 
     [Header("Game Layout (optional - will auto-create if null)")]
     public GameLayout gameLayout;
@@ -25,9 +28,9 @@ public class UIManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            //DontDestroyOnLoad(gameObject);
         }
-        else
+        else if(Instance != this)
         {
             Destroy(gameObject);
         }
@@ -48,9 +51,11 @@ public class UIManager : MonoBehaviour
             rect.offsetMax = Vector2.zero;
             gameLayout = layoutObj.AddComponent<GameLayout>();
         }
-        
-        ShowStartScreen();
-        
+
+        if (startScreen != null)
+            ShowStartScreen();
+        else
+            HideStartScreen();
     }
 
     public void ShowStartScreen()
@@ -114,6 +119,11 @@ public class UIManager : MonoBehaviour
 
     public void ShowGameOver(bool isVictory = false)
     {
+        if (KeyInventoryUI.Instance != null)
+            KeyInventoryUI.Instance.HidePopUp();
+        if (TutorialManager.Instance != null)
+            TutorialManager.Instance.HideTutorialPopup();
+
         var title = gameOverTitleText ?? (gameOverScreen != null ? gameOverScreen.GetComponentInChildren<TMP_Text>(true) : null);
         if (title != null)
         {
@@ -125,6 +135,9 @@ public class UIManager : MonoBehaviour
         }
         if (mainMenuButton != null)
             mainMenuButton.SetActive(true);
+        bool hasNextLevel = SceneManager.GetActiveScene().name != "Level2";
+        if (nextLevelButton != null)
+            nextLevelButton.SetActive(isVictory && hasNextLevel);
         if (gameOverScreen != null)
             gameOverScreen.SetActive(true);
 
@@ -143,12 +156,23 @@ public class UIManager : MonoBehaviour
         ShowGameOver(isVictory: true);
     }
 
-    public void ShowLevel1Complete()
+    public void ShowLevelComplete()
     {
+        if (KeyInventoryUI.Instance != null)
+            KeyInventoryUI.Instance.HidePopUp();
+        if (TutorialManager.Instance != null)
+            TutorialManager.Instance.HideTutorialPopup();
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.SubmitLevelAnalytics(true);
+
         var title = gameOverTitleText ?? (gameOverScreen != null ? gameOverScreen.GetComponentInChildren<TMP_Text>(true) : null);
         if (title != null)
-            title.text = "<b><color=#3CFF6E>You completed Level1!</color></b>";
+            title.text = "<b><color=#3CFF6E>You completed the Level!</color></b>";
 
+        bool hasNextLevel = SceneManager.GetActiveScene().name != "Level2";
+        if (nextLevelButton != null)
+            nextLevelButton.SetActive(hasNextLevel);
         if (gameOverScreen != null)
             gameOverScreen.SetActive(true);
 
@@ -161,18 +185,24 @@ public class UIManager : MonoBehaviour
         Time.timeScale = 0f;
     }
 
-    void LoadMainMenu()
-    {
-        Time.timeScale = 1f;
-        SceneManager.LoadScene("MainMenu-Scene");
-    }
+    // public void LoadMainMenu()
+    // {
+    //     Time.timeScale = 1f;
+    //     SceneManager.LoadScene("MainMenu-Scene");
+    // }
 
     public void RestartGame()
     {
-
         if (GameManager.Instance != null)
             GameManager.Instance.RestartLevel();
-        ShowStartScreen();
+        //ShowStartScreen();
+    }
+
+    public void ContinueToNextLane()
+    {
+        Time.timeScale = 1f;
+        if (GameManager.Instance != null)
+            GameManager.Instance.LoadNextLane();
     }
 
     public void ShowInteractPrompt()

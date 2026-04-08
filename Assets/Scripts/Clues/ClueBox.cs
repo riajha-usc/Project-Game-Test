@@ -63,7 +63,10 @@ public class ClueBox : MonoBehaviour
         currentlyOpenClue = this;
 
         if (GameManager.Instance != null)
+        {
+            GameManager.Instance.RecordClueZoneEntry();
             GameManager.Instance.RecordClueSolved(clueIndex);
+        }
 
         if (GameLayout.Instance != null)
             GameLayout.Instance.Refresh();

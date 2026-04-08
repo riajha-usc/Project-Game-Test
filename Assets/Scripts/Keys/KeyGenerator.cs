@@ -9,7 +9,7 @@ public class KeyGenerator : MonoBehaviour
     public static KeyGenerator Instance { get; private set; }
     public Material keyMaterialTemplate;
     public Transform[] spawnPoints;
-    public float overallScale = 0.4f;
+    public float overallScale = 0.25f;
     public float slantX = 18f;
     public float slantZ = 10f;
     public float rotateSpeed = 80f;
@@ -25,6 +25,11 @@ public class KeyGenerator : MonoBehaviour
     [HideInInspector] public List<string> generatedClues = new List<string>();
     const KeyHeadShape TutorialCorrectShape = KeyHeadShape.Square;
     const KeyColorType TutorialCorrectColor = KeyColorType.Yellow;
+
+    // GetShapeClues(): [0] = Level 1, [1] and [2] = Level 2 boxes
+    const int ShapeClueIndexLevel1 = 0;
+    const int ShapeClueIndexLevel2A = 1;
+    const int ShapeClueIndexLevel2B = 2;
 
     void Awake()
     {
@@ -171,7 +176,8 @@ public class KeyGenerator : MonoBehaviour
         KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
         correctColor = KeyColorType.Yellow;
         correctShape = shapes[Random.Range(0, shapes.Length)];
-        generatedClues = new List<string>(GetShapeClues(correctShape));
+        var shapeLines = GetShapeClues(correctShape);
+        generatedClues = new List<string> { shapeLines[ShapeClueIndexLevel1] };
         int teeth = 3;
         Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
         int count = Mathf.Min(spawnPoints.Length, shapes.Length);
@@ -192,42 +198,28 @@ public class KeyGenerator : MonoBehaviour
 
     void GenerateLane2()
     {
-        KeyHeadShape[] shapes = ShuffleShapes((KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape)));
-
-        int count = Mathf.Min(spawnPoints.Length, 4);
-        Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
+        KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
+        correctColor = KeyColorType.Yellow;
+        correctShape = shapes[Random.Range(0, shapes.Length)];
+        // Two clue boxes: indices 1 and 2 (ClueBoxGenerator.LANE2_PLACEMENTS).
+        var shapeLines = GetShapeClues(correctShape);
+        generatedClues = new List<string> { shapeLines[ShapeClueIndexLevel2A], shapeLines[ShapeClueIndexLevel2B] };
         int teeth = 3;
-
-        int correctIndex = Random.Range(0, count);
-        correctShape = shapes[correctIndex];
-        correctColor = KeyColorType.White;
-
-        int puzzleType = Random.Range(1, 3);
-        correctKeySpinning = (puzzleType != 2);
-
+        Quaternion keyRot = Quaternion.Euler(slantX, 0f, slantZ);
+        int count = Mathf.Min(spawnPoints.Length, shapes.Length);
         for (int i = 0; i < count; i++)
         {
             if (spawnPoints[i] == null) continue;
-
-            bool shouldSpin = !(puzzleType == 2 && i == correctIndex);
-            CreateKeyObject($"Key_{i}_{shapes[i]}",
-                spawnPoints[i].position, keyRot, shapes[i], KeyColorType.White, teeth, shouldSpin);
+            CreateKeyObject($"Level2_Key_{i}_{shapes[i]}",
+                spawnPoints[i].position, keyRot, shapes[i], correctColor, teeth, spinning: true);
         }
-        if (puzzleType == 1)
-            generatedClues.AddRange(GetShapeClues(correctShape));
-        else
-        {
-            generatedClues.Add("Not all that spins is gold. One stands still with purpose.");
-            generatedClues.Add("The patient key never dances.");
-        }
+        if (KeyInventory.Instance != null)
+            KeyInventory.Instance.requiredKeyCount = count;
+        ShowTutorialShapeLabels(false);
 
         ClueBoxGenerator.SpawnForActiveScene(generatedClues);
         PersistToGameManager();
-
-        string[] puzzleNames = { "Color", "Shape", "Spin" };
-        Debug.Log($"[Lane2] Puzzle: {puzzleNames[puzzleType]} | Correct key: {correctColor} {correctShape}");
-        foreach (string clue in generatedClues)
-            Debug.Log("[Clue] " + clue);
+        Debug.Log($"[Level2] Correct key: {correctColor} {correctShape}");
     }
 
     string[] GetColorClues(KeyColorType color)
@@ -252,15 +244,40 @@ public class KeyGenerator : MonoBehaviour
         switch (shape)
         {
             case KeyHeadShape.Circle:
-                return new[] { "Key shape that never breaks into corners" }; // need to add more for level 2
+                return new[]
+                {
+                    "Key shape that never breaks into corners",
+                    "The path closes on itself—no corner to hide behind.",
+                    "Every direction from the center is the same distance."
+                };
             case KeyHeadShape.Square:
-                return new[] { "Key shape where all sides agree"}; 
+                return new[]
+                {
+                    "Key shape where all sides agree",
+                    "straight edges, equal corners.",
+                    "Turn four times and you face home again."
+                };
             case KeyHeadShape.Capsule:
-                return new[] { "Key shape that is neither sharp nor whole." };
+                return new[]
+                {
+                    "Key shape that is neither sharp nor whole.",
+                    "Straight in the middle, rounded at the ends—like a pill.",
+                    "Not a ball, not a bar alone: two half-moons joined by a hallway."
+                };
             case KeyHeadShape.Cross:
-                return new[] { "Key shape where two paths meet"};
+                return new[]
+                {
+                    "Key shape where two paths meet",
+                    "One line crosses another; four arms point away from the middle.",
+                    "Where a vertical meets a horizontal and neither wins."
+                };
             default:
-                return new[] { "Look carefully at the shapes.", "One shape holds the answer." };
+                return new[]
+                {
+                    "Look carefully at the shapes.",
+                    "One shape holds the answer.",
+                    "One shape holds the answer."
+                };
         }
     }
 
