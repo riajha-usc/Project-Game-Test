@@ -17,7 +17,7 @@ public class ClueBox : MonoBehaviour
     private static ClueBox currentlyOpenClue = null;
 
     private const float DISPLAY_HEIGHT_ABOVE_BOX = 0.8f;
-    private const float DISPLAY_INSET_FROM_WALL  = 0.12f;
+    private const float DISPLAY_INSET_FROM_WALL  = 0.01f;
 
     void Start()
     {

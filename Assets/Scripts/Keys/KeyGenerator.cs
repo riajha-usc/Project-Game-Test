@@ -84,22 +84,31 @@ public class KeyGenerator : MonoBehaviour
                 spinning: true);
         }
         // shape labels above the tutorial keys
-        ShowTutorialShapeLabels(true);
+        ShowTutorialShapeLabels(true, shapes);
     }
 
-    void ShowTutorialShapeLabels(bool show)
+    void ShowTutorialShapeLabels(bool show, KeyHeadShape[] shapeOrder = null)
     {
-        if (show && _tutorialShapeLabels.Count == 0)
-            CreateTutorialShapeLabels();
+        if (show)
+        {
+            if (shapeOrder != null)
+                CreateTutorialShapeLabels(shapeOrder);
+            else if (_tutorialShapeLabels.Count == 0)
+                CreateTutorialShapeLabels((KeyHeadShape[])System.Enum.GetValues(typeof(KeyHeadShape)));
+        }
 
         foreach (var lbl in _tutorialShapeLabels)
             if (lbl != null) lbl.SetActive(show);
     }
 
-    void CreateTutorialShapeLabels()
+    void CreateTutorialShapeLabels(KeyHeadShape[] shapeOrder)
     {
-        KeyHeadShape[] shapes = (KeyHeadShape[])System.Enum.GetValues(typeof(KeyHeadShape));
-        int count = Mathf.Min(spawnPoints != null ? spawnPoints.Length : 0, shapes.Length);
+        for (int i = 0; i < _tutorialShapeLabels.Count; i++)
+            if (_tutorialShapeLabels[i] != null) Destroy(_tutorialShapeLabels[i]);
+        _tutorialShapeLabels.Clear();
+        _tutorialLabelByShape.Clear();
+
+        int count = Mathf.Min(spawnPoints != null ? spawnPoints.Length : 0, shapeOrder.Length);
 
         Color labelColor = new Color(1f, 0.84f, 0f);
 
@@ -110,7 +119,7 @@ public class KeyGenerator : MonoBehaviour
 
             Vector3 labelPos = spawnPoints[i].position + Vector3.up * 1.4f;
 
-            KeyHeadShape shape = shapes[i];
+            KeyHeadShape shape = shapeOrder[i];
             string shapeName = shape.ToString().ToUpperInvariant();
 
             GameObject go = new GameObject($"TutorialShapeLabel_{shapeName}");
@@ -174,6 +183,7 @@ public class KeyGenerator : MonoBehaviour
     void GenerateLane1()
     {
         KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
+        ShuffleShapes(shapes);
         correctColor = KeyColorType.Yellow;
         correctShape = shapes[Random.Range(0, shapes.Length)];
         var shapeLines = GetShapeClues(correctShape);
@@ -183,13 +193,16 @@ public class KeyGenerator : MonoBehaviour
         int count = Mathf.Min(spawnPoints.Length, shapes.Length);
         for (int i = 0; i < count; i++)
         {
+            Debug.Log("Index: " + i);
+            Debug.Log("Spawn Points: " + spawnPoints[i]);
+            Debug.Log("Shape: " + shapes[i]);
             if (spawnPoints[i] == null) continue;
             CreateKeyObject($"Level1_Key_{i}_{shapes[i]}",
                 spawnPoints[i].position, keyRot, shapes[i], correctColor, teeth, spinning: true);
         }
         if (KeyInventory.Instance != null)
             KeyInventory.Instance.requiredKeyCount = count;
-        ShowTutorialShapeLabels(true);
+        ShowTutorialShapeLabels(true, shapes);
         ClueBoxGenerator.SpawnForActiveScene(generatedClues);
 
         PersistToGameManager();
@@ -199,6 +212,7 @@ public class KeyGenerator : MonoBehaviour
     void GenerateLane2()
     {
         KeyHeadShape[] shapes = (KeyHeadShape[])Enum.GetValues(typeof(KeyHeadShape));
+        ShuffleShapes(shapes);
         correctColor = KeyColorType.Yellow;
         correctShape = shapes[Random.Range(0, shapes.Length)];
         // Two clue boxes: indices 1 and 2 (ClueBoxGenerator.LANE2_PLACEMENTS).
@@ -220,6 +234,15 @@ public class KeyGenerator : MonoBehaviour
         ClueBoxGenerator.SpawnForActiveScene(generatedClues);
         PersistToGameManager();
         Debug.Log($"[Level2] Correct key: {correctColor} {correctShape}");
+    }
+
+    static void ShuffleShapes(KeyHeadShape[] shapes)
+    {
+        for (int i = shapes.Length - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (shapes[i], shapes[j]) = (shapes[j], shapes[i]);
+        }
     }
 
     string[] GetColorClues(KeyColorType color)

@@ -21,12 +21,15 @@ public class LevelTimer : MonoBehaviour
     float _timeRemaining;
     bool _active;
     bool _inWarnPhase;
+    public static bool InWarnPhase { get; private set; }
     float _drainAccumulator;
 
     TMP_Text _timerText;
     TMP_Text _warnLabel;
     GameObject _timerRoot;
     Coroutine _blinkCoroutine;
+    Image _vignetteImage;
+    Coroutine _vignetteCoroutine;
 
     static readonly Color ColNormal  = Color.white;
     static readonly Color ColWarning = new Color(1f, 0.22f, 0.1f, 1f);
@@ -96,18 +99,24 @@ public class LevelTimer : MonoBehaviour
     void EnterWarnPhase()
     {
         _inWarnPhase = true;
+        InWarnPhase = true;
         _drainAccumulator = 0f;
         if (_warnLabel != null) _warnLabel.gameObject.SetActive(true);
         if (_blinkCoroutine != null) StopCoroutine(_blinkCoroutine);
         _blinkCoroutine = StartCoroutine(BlinkTimer());
+        if (_vignetteCoroutine != null) StopCoroutine(_vignetteCoroutine);
+        _vignetteCoroutine = StartCoroutine(PulseVignette());
     }
 
     void ExitWarnPhase()
     {
         _inWarnPhase = false;
+        InWarnPhase = false;
         if (_blinkCoroutine != null) { StopCoroutine(_blinkCoroutine); _blinkCoroutine = null; }
         if (_timerText != null) _timerText.color = ColNormal;
         if (_warnLabel != null) _warnLabel.gameObject.SetActive(false);
+        if (_vignetteCoroutine != null) { StopCoroutine(_vignetteCoroutine); _vignetteCoroutine = null; }
+        if (_vignetteImage != null) _vignetteImage.color = Color.clear;
     }
 
     IEnumerator BlinkTimer()
@@ -115,11 +124,90 @@ public class LevelTimer : MonoBehaviour
         bool visible = true;
         while (_inWarnPhase)
         {
+            float onTime  = _timeRemaining <= warnThreshold * 0.4f ? 0.18f : 0.3f;  // faster near end
+            float offTime = 0.12f;
+
             if (_timerText != null)
-                _timerText.color = visible ? ColWarning : new Color(ColWarning.r, ColWarning.g, ColWarning.b, 0.15f);
+                _timerText.color = visible ? ColWarning : Color.clear;
             visible = !visible;
-            yield return new WaitForSeconds(0.4f);
+            yield return new WaitForSecondsRealtime(visible ? offTime : onTime);
         }
+        if (_timerText != null) _timerText.color = ColNormal;
+    }
+
+    IEnumerator PulseVignette()
+    {
+        BuildVignetteIfNeeded();
+        if (_vignetteImage == null) yield break;
+
+        while (_inWarnPhase)
+        {
+            float ratio = _timeRemaining / warnThreshold;   // 1→0 as warning progresses
+            float maxAlpha = Mathf.Lerp(0.3f, 0.15f, ratio);  // more intense as time runs out
+
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / 0.5f;
+                _vignetteImage.color = new Color(0.7f, 0f, 0f, Mathf.Lerp(0f, maxAlpha, t));
+                yield return null;
+            }
+            t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / 0.5f;
+                _vignetteImage.color = new Color(0.7f, 0f, 0f, Mathf.Lerp(maxAlpha, 0f, t));
+                yield return null;
+            }
+
+            yield return new WaitForSecondsRealtime(0.1f);
+        }
+
+        if (_vignetteImage != null) _vignetteImage.color = Color.clear;
+    }
+
+    void BuildVignetteIfNeeded()
+    {
+        if (_vignetteImage != null) return;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null && GameLayout.Instance != null)
+            canvas = GameLayout.Instance.GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        var go = new GameObject("TimerVignette");
+        go.transform.SetParent(canvas.transform, false);
+        go.transform.SetAsFirstSibling();   // behind everything
+
+        var rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        _vignetteImage = go.AddComponent<Image>();
+        _vignetteImage.sprite = BuildVignetteSprite();
+        _vignetteImage.color = Color.clear;
+        _vignetteImage.raycastTarget = false;
+    }
+
+    static Sprite BuildVignetteSprite()
+    {
+        int res = 128;
+        var tex = new Texture2D(res, res, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        float borderWidth = res * 0.10f;
+        var pixels = new Color[res * res];
+        for (int y = 0; y < res; y++)
+        for (int x = 0; x < res; x++)
+        {
+            float edgeDist = Mathf.Min(x, y, res - 1 - x, res - 1 - y);
+            float a = Mathf.InverseLerp(borderWidth, 0f, edgeDist);
+            pixels[y * res + x] = new Color(1f, 1f, 1f, a);
+        }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, res, res), new Vector2(0.5f, 0.5f));
     }
 
     void DrainPlayerHP()
@@ -157,7 +245,7 @@ public class LevelTimer : MonoBehaviour
         rect.anchorMax = new Vector2(0.5f, 1f);
         rect.pivot     = new Vector2(0.5f, 1f);
         rect.anchoredPosition = new Vector2(0f, -62f);
-        rect.sizeDelta = new Vector2(220f, 52f);
+        rect.sizeDelta = new Vector2(260f, 58f);
 
         var bg = new GameObject("BG");
         bg.transform.SetParent(_timerRoot.transform, false);
@@ -168,7 +256,7 @@ public class LevelTimer : MonoBehaviour
         bgRect.offsetMin = new Vector2(-6f, -6f);
         bgRect.offsetMax = new Vector2(6f, 6f);
         var img = bg.AddComponent<Image>();
-        img.color = new Color(0.08f, 0.08f, 0.1f, 0.42f);   
+        img.color = new Color(0.08f, 0.08f, 0.1f, 0.92f);   
 
         var textGO = new GameObject("TimerText");
         textGO.transform.SetParent(_timerRoot.transform, false);
@@ -179,7 +267,7 @@ public class LevelTimer : MonoBehaviour
         textRect.offsetMax = Vector2.zero;
 
         _timerText = textGO.AddComponent<TextMeshProUGUI>();
-        _timerText.fontSize = 20f;
+        _timerText.fontSize = 24f;
         _timerText.fontStyle = FontStyles.Bold;
         _timerText.color = ColNormal;
         _timerText.alignment = TextAlignmentOptions.Center;
@@ -197,7 +285,7 @@ public class LevelTimer : MonoBehaviour
 
         _warnLabel = warnGO.AddComponent<TextMeshProUGUI>();
         _warnLabel.text = $"[!]  -{hpDrainAmount} HP every {drainInterval}s";
-        _warnLabel.fontSize = 15f;
+        _warnLabel.fontSize = 14f;
         _warnLabel.color = ColWarning;
         _warnLabel.alignment = TextAlignmentOptions.Center;
         _warnLabel.textWrappingMode = TextWrappingModes.NoWrap;

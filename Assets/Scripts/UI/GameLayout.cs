@@ -18,6 +18,22 @@ public class GameLayout : MonoBehaviour
     [Header("Auto-build UI if references are null")]
     public bool buildUIAtRuntime = true;
 
+    [Header("Health HUD")]
+    public bool buildHealthHUD = true;
+    public Vector2 healthHUDTopLeftOffset = new Vector2(16f, -110f);
+    public string healthLabelText = "Health";
+    public int healthLabelFontSize = 22;
+    public float healthLabelGap = 10f;
+    public float healthLabelYOffset = -18f;
+    public Vector2 healthSliderSize = new Vector2(172f, 26f);
+
+    [Header("Health HUD Colors")]
+    [Range(0f, 1f)] public float healthYellowThreshold = 0.5f;
+    [Range(0f, 1f)] public float healthRedThreshold = 0.3f;
+    public Color healthNormalColor = new Color(0.15f, 0.8f, 0.35f, 1f);
+    public Color healthYellowColor = new Color(0.95f, 0.8f, 0.2f, 1f);
+    public Color healthRedColor = new Color(0.9f, 0.2f, 0.2f, 1f);
+
     RectTransform rootRect;
     float updateInterval = 0.2f;
     float nextUpdate;
@@ -25,6 +41,14 @@ public class GameLayout : MonoBehaviour
     Coroutine wrongKeyFeedbackCoroutine;
     GameObject controlsPanel;
     GameObject levelTitleRoot;
+    GameObject healthHUDRoot;
+    Slider healthHUDSlider;
+    Image healthHUDFillImage;
+    TextMeshProUGUI healthHUDValueText;
+    Coroutine healthBlinkCoroutine;
+    bool healthBlinkVisible = true;
+    Image healthVignetteImage;
+    Coroutine healthVignetteCoroutine;
 
     void Awake()
     {
@@ -46,7 +70,9 @@ public class GameLayout : MonoBehaviour
         else if (levelTitleText == null)
             BuildLevelTitle();
 
-        // ReparentHealthBarToTopLeft();
+        if (buildHealthHUD)
+            EnsureHealthHUD();
+
         nextUpdate = Time.unscaledTime + updateInterval;
     }
 
@@ -65,6 +91,7 @@ public class GameLayout : MonoBehaviour
 
         if (Time.unscaledTime < nextUpdate) return;
         nextUpdate = Time.unscaledTime + updateInterval;
+        UpdateHealthHUD();
         Refresh();
     }
 
@@ -213,6 +240,8 @@ public class GameLayout : MonoBehaviour
         AddLightBackground(attemptsObj, 12);
 
         BuildControlsPanel();
+        if (buildHealthHUD)
+            EnsureHealthHUD();
         Refresh();
     }
 
@@ -230,14 +259,14 @@ public class GameLayout : MonoBehaviour
         levelRect.anchorMax = new Vector2(0.5f, 1f);
         levelRect.pivot = new Vector2(0.5f, 1f);
         levelRect.anchoredPosition = new Vector2(0f, -16f);
-        levelRect.sizeDelta = new Vector2(220f, 36f);
+        levelRect.sizeDelta = new Vector2(260f, 36f);
 
         levelTitleText = CreateText(levelTitleRoot.transform, "Level 1", 28);
         levelTitleText.fontStyle = FontStyles.Bold;
         levelTitleText.alignment = TextAlignmentOptions.Center;
         levelTitleText.textWrappingMode = TextWrappingModes.NoWrap;
         // Lighter than clues/attempts: less padding + lower alpha so it does not dominate the top bar
-        AddLightBackground(levelTitleRoot, 6f, 0.42f);
+        AddLightBackground(levelTitleRoot, 6f);
     }
 
     static string GetLevelTitleForScene(string sceneName)
@@ -267,7 +296,6 @@ public class GameLayout : MonoBehaviour
 
     void BuildControlsPanel()
     {
-        // Top-left controls hint panel
         controlsPanel = new GameObject("ControlsPanel");
         controlsPanel.transform.SetParent(rootRect, false);
 
@@ -280,7 +308,6 @@ public class GameLayout : MonoBehaviour
 
         AddLightBackground(controlsPanel, 14);
 
-        // Line 1 — Movement
         var line1 = new GameObject("ControlsLine1");
         line1.transform.SetParent(controlsPanel.transform, false);
         var r1 = line1.AddComponent<RectTransform>();
@@ -346,5 +373,290 @@ public class GameLayout : MonoBehaviour
         if (TMP_Settings.defaultFontAsset != null)
             tmp.font = TMP_Settings.defaultFontAsset;
         return tmp;
+    }
+
+    void EnsureHealthHUD()
+    {
+        if (healthHUDRoot != null) return;
+        if (rootRect == null) rootRect = GetComponent<RectTransform>();
+        if (rootRect == null) return;
+
+        var player = GameObject.FindObjectOfType<PlayerMovement3D>();
+        if (player == null) return;
+
+        foreach (var legacySlider in player.GetComponentsInChildren<Slider>(true))
+        {
+            var c = legacySlider.GetComponentInParent<Canvas>();
+            if (c != null && c.renderMode == RenderMode.WorldSpace)
+                Destroy(legacySlider.gameObject);
+        }
+
+        healthHUDRoot = new GameObject("HealthHUD");
+        healthHUDRoot.transform.SetParent(rootRect, false);
+        var root = healthHUDRoot.AddComponent<RectTransform>();
+        root.anchorMin = new Vector2(0f, 1f);
+        root.anchorMax = new Vector2(0f, 1f);
+        root.pivot = new Vector2(0f, 1f);
+        root.anchoredPosition = healthHUDTopLeftOffset;
+        root.sizeDelta = new Vector2(270f, 54f);
+
+        AddLightBackground(healthHUDRoot, 14f);
+
+        const float labelWidth = 66f;
+        var labelGO = new GameObject("HealthLabel");
+        labelGO.transform.SetParent(root, false);
+        var labelRect = labelGO.AddComponent<RectTransform>();
+        labelRect.anchorMin = new Vector2(0f, 0.45f);
+        labelRect.anchorMax = new Vector2(0f, 1f);
+        labelRect.pivot    = new Vector2(0f, 0.5f);
+        labelRect.anchoredPosition = new Vector2(8f, 0f);
+        labelRect.sizeDelta = new Vector2(labelWidth, 0f);
+        var labelTMP = labelGO.AddComponent<TextMeshProUGUI>();
+        labelTMP.text = healthLabelText;
+        labelTMP.fontSize = healthLabelFontSize;
+        labelTMP.fontStyle = FontStyles.Bold;
+        labelTMP.color = Color.white;
+        labelTMP.alignment = TextAlignmentOptions.MidlineLeft;
+        labelTMP.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null) labelTMP.font = TMP_Settings.defaultFontAsset;
+
+        var sliderGO = new GameObject("HealthSlider");
+        sliderGO.transform.SetParent(root, false);
+        var sliderRect = sliderGO.AddComponent<RectTransform>();
+        sliderRect.anchorMin = new Vector2(0f, 0.45f);
+        sliderRect.anchorMax = new Vector2(0f, 1f);
+        sliderRect.pivot = new Vector2(0f, 0.5f);
+        sliderRect.anchoredPosition = new Vector2(labelWidth + 8f + healthLabelGap, 0f);
+        sliderRect.sizeDelta = new Vector2(healthSliderSize.x, 0f);
+
+        var healthSlider = sliderGO.AddComponent<Slider>();
+        healthSlider.transition = Selectable.Transition.None;
+        healthSlider.direction = Slider.Direction.LeftToRight;
+        healthSlider.minValue = 0f;
+        healthSlider.maxValue = 1f;
+        healthSlider.value = 1f;
+
+        var bgGO = new GameObject("Background");
+        bgGO.transform.SetParent(sliderGO.transform, false);
+        var bgRect = bgGO.AddComponent<RectTransform>();
+        bgRect.anchorMin = Vector2.zero;
+        bgRect.anchorMax = Vector2.one;
+        bgRect.offsetMin = Vector2.zero;
+        bgRect.offsetMax = Vector2.zero;
+        var bgImg = bgGO.AddComponent<Image>();
+        bgImg.sprite = null;
+        bgImg.type = Image.Type.Simple;
+        bgImg.color = new Color(0f, 0f, 0f, 0.35f);
+
+        var fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(sliderGO.transform, false);
+        var fillAreaRect = fillArea.AddComponent<RectTransform>();
+        fillAreaRect.anchorMin = Vector2.zero;
+        fillAreaRect.anchorMax = Vector2.one;
+        fillAreaRect.offsetMin = new Vector2(4f, 3f);
+        fillAreaRect.offsetMax = new Vector2(-4f, -3f);
+
+        var fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(fillArea.transform, false);
+        var fillRect = fillGO.AddComponent<RectTransform>();
+        fillRect.anchorMin = Vector2.zero;
+        fillRect.anchorMax = Vector2.one;
+        fillRect.offsetMin = Vector2.zero;
+        fillRect.offsetMax = Vector2.zero;
+        var fillImg = fillGO.AddComponent<Image>();
+        fillImg.sprite = null;
+        fillImg.type = Image.Type.Simple;
+        fillImg.color = healthNormalColor;
+
+        healthSlider.fillRect = fillRect;
+        healthSlider.targetGraphic = fillImg;
+
+        var valueGO = new GameObject("HealthValueText");
+        valueGO.transform.SetParent(root, false);
+        var valueRect = valueGO.AddComponent<RectTransform>();
+        valueRect.anchorMin = new Vector2(0f, 0f);
+        valueRect.anchorMax = new Vector2(1f, 0.42f);
+        valueRect.offsetMin = Vector2.zero;
+        valueRect.offsetMax = Vector2.zero;
+        var valueTMP = valueGO.AddComponent<TextMeshProUGUI>();
+        valueTMP.text = "100 / 100";
+        valueTMP.fontSize = 16;
+        valueTMP.fontStyle = FontStyles.Bold;
+        valueTMP.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+        valueTMP.alignment = TextAlignmentOptions.Center;
+        valueTMP.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null) valueTMP.font = TMP_Settings.defaultFontAsset;
+
+        healthHUDSlider = healthSlider;
+        healthHUDFillImage = fillImg;
+        healthHUDValueText = valueTMP;
+    }
+
+    void UpdateHealthHUD()
+    {
+        if (!buildHealthHUD) return;
+        if (healthHUDRoot == null) EnsureHealthHUD();
+        if (healthHUDRoot == null) return;
+
+        var player = GameObject.FindObjectOfType<PlayerMovement3D>();
+        if (player == null) return;
+
+        float max = Mathf.Max(0.001f, player.maxHp);
+        float ratio = Mathf.Clamp01(player.hp / max);
+
+        if (healthHUDSlider != null)
+            healthHUDSlider.value = ratio;
+
+        if (healthHUDValueText != null)
+            healthHUDValueText.text = $"{Mathf.RoundToInt(player.hp)} / {Mathf.RoundToInt(player.maxHp)}";
+
+        if (healthHUDFillImage != null)
+        {
+            var target =
+                ratio <= healthRedThreshold ? healthRedColor :
+                ratio <= healthYellowThreshold ? healthYellowColor :
+                healthNormalColor;
+            if (healthHUDFillImage.color != target)
+                healthHUDFillImage.color = target;
+        }
+
+        bool shouldBlink = ratio <= healthYellowThreshold;
+        if (shouldBlink && healthBlinkCoroutine == null)
+            healthBlinkCoroutine = StartCoroutine(BlinkHealthBar(ratio));
+        else if (!shouldBlink && healthBlinkCoroutine != null)
+        {
+            StopCoroutine(healthBlinkCoroutine);
+            healthBlinkCoroutine = null;
+            if (healthHUDFillImage != null) healthHUDFillImage.color = healthNormalColor;
+            healthBlinkVisible = true;
+        }
+
+        bool shouldVignette = ratio <= healthRedThreshold;
+        if (shouldVignette && healthVignetteCoroutine == null)
+            healthVignetteCoroutine = StartCoroutine(PulseHealthVignette(ratio));
+        else if (!shouldVignette && healthVignetteCoroutine != null)
+        {
+            StopCoroutine(healthVignetteCoroutine);
+            healthVignetteCoroutine = null;
+            if (healthVignetteImage != null) healthVignetteImage.color = Color.clear;
+        }
+    }
+
+    IEnumerator PulseHealthVignette(float initialRatio)
+    {
+        EnsureHealthVignette();
+        if (healthVignetteImage == null) yield break;
+
+        while (true)
+        {
+            var player = FindObjectOfType<PlayerMovement3D>();
+            if (player == null) yield break;
+
+            float max = Mathf.Max(0.001f, player.maxHp);
+            float ratio = Mathf.Clamp01(player.hp / max);
+
+            if (ratio > healthYellowThreshold)
+            {
+                healthVignetteCoroutine = null;
+                healthVignetteImage.color = Color.clear;
+                yield break;
+            }
+
+            float maxAlpha = 0.28f;
+            float speed    = 0.35f;
+            var vigColor   = new Color(0.8f, 0f, 0f);
+
+            float t = 0f;
+            while (t < 1f) { t += Time.unscaledDeltaTime / speed; healthVignetteImage.color = new Color(vigColor.r, vigColor.g, vigColor.b, Mathf.Lerp(0f, maxAlpha, t)); yield return null; }
+            t = 0f;
+            while (t < 1f) { t += Time.unscaledDeltaTime / speed; healthVignetteImage.color = new Color(vigColor.r, vigColor.g, vigColor.b, Mathf.Lerp(maxAlpha, 0f, t)); yield return null; }
+
+            yield return new WaitForSecondsRealtime(0.05f);
+        }
+    }
+
+    void EnsureHealthVignette()
+    {
+        if (healthVignetteImage != null) return;
+        var canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        var go = new GameObject("HealthVignette");
+        go.transform.SetParent(canvas.transform, false);
+        go.transform.SetAsFirstSibling();
+
+        var rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        healthVignetteImage = go.AddComponent<Image>();
+        healthVignetteImage.sprite = BuildVignetteSprite();
+        healthVignetteImage.color = Color.clear;
+        healthVignetteImage.raycastTarget = false;
+    }
+
+    static Sprite BuildVignetteSprite()
+    {
+        int res = 128;
+        var tex = new Texture2D(res, res, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        var pixels = new Color[res * res];
+        float borderWidth = res * 0.10f;
+        for (int y = 0; y < res; y++)
+        for (int x = 0; x < res; x++)
+        {
+            float edgeDist = Mathf.Min(x, y, res - 1 - x, res - 1 - y);
+            float a = Mathf.InverseLerp(borderWidth, 0f, edgeDist);
+            pixels[y * res + x] = new Color(1f, 1f, 1f, a);
+        }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, res, res), new Vector2(0.5f, 0.5f));
+    }
+
+    IEnumerator BlinkHealthBar(float initialRatio)
+    {
+        while (true)
+        {
+            var player = GameObject.FindObjectOfType<PlayerMovement3D>();
+            if (player == null) yield break;
+
+            float max = Mathf.Max(0.001f, player.maxHp);
+            float ratio = Mathf.Clamp01(player.hp / max);
+
+            if (ratio > healthYellowThreshold)
+            {
+                healthBlinkCoroutine = null;
+                if (healthHUDFillImage != null) healthHUDFillImage.color = healthNormalColor;
+                yield break;
+            }
+
+            Color barColor = ratio <= healthRedThreshold ? healthRedColor : healthYellowColor;
+            Color dimColor = new Color(barColor.r, barColor.g, barColor.b, 0.25f);
+            // Fast if both health red AND timer warning, slow if health red only
+            bool bothCritical = ratio <= healthRedThreshold && LevelTimer.InWarnPhase;
+            float beatSpeed = bothCritical ? 0.1f : 1f;
+            float pauseTime = bothCritical ? 0.05f : 0.12f;
+
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / beatSpeed;
+                if (healthHUDFillImage != null)
+                    healthHUDFillImage.color = Color.Lerp(dimColor, barColor, t);
+                yield return null;
+            }
+            t = 0f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / beatSpeed;
+                if (healthHUDFillImage != null)
+                    healthHUDFillImage.color = Color.Lerp(barColor, dimColor, t);
+                yield return null;
+            }
+            yield return new WaitForSecondsRealtime(pauseTime);
+        }
     }
 }

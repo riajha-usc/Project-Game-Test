@@ -61,7 +61,7 @@ public class UIManager : MonoBehaviour
     public void ShowStartScreen()
     {
         if (startScreen != null)
-            startScreen.SetActive(true);
+            startScreen.SetActive(false);
 
         if (gameOverScreen != null)
             gameOverScreen.SetActive(false);
@@ -119,6 +119,9 @@ public class UIManager : MonoBehaviour
 
     public void ShowGameOver(bool isVictory = false)
     {
+        if (startScreen != null)
+            startScreen.SetActive(false);
+
         if (KeyInventoryUI.Instance != null)
             KeyInventoryUI.Instance.HidePopUp();
         if (TutorialManager.Instance != null)

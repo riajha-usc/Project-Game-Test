@@ -345,6 +345,7 @@ public class TutorialManager : MonoBehaviour
             0);
         Destroy(gen.gameObject);
         _clueBox = _clueBoxGO.GetComponent<ClueBox>();
+        _clueBox.interactionRange = 2.5f;
         _clueBox.OnClueOpenedEvent += () => _clueOpened = true;
     }
 

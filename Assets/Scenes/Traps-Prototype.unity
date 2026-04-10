@@ -493,6 +493,7 @@ GameObject:
   - component: {fileID: 280079181}
   - component: {fileID: 280079180}
   - component: {fileID: 280079184}
+  - component: {fileID: 280079185}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -601,6 +602,34 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrapAgentHUD
   maxPills: 1
   usesPerPill: 2
+--- !u!114 &280079185
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 280079179}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c017cbb49c79643aaa06c070269fd632, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameLayout
+  levelTitleText: {fileID: 0}
+  cluesProgressText: {fileID: 0}
+  attemptsProgressText: {fileID: 0}
+  buildUIAtRuntime: 0
+  buildHealthHUD: 1
+  healthHUDTopLeftOffset: {x: 16, y: -110}
+  healthLabelText: Health
+  healthLabelFontSize: 22
+  healthLabelGap: 10
+  healthLabelYOffset: -18
+  healthSliderSize: {x: 172, y: 26}
+  healthYellowThreshold: 0.5
+  healthRedThreshold: 0.3
+  healthNormalColor: {r: 0.15, g: 0.8, b: 0.35, a: 1}
+  healthYellowColor: {r: 0.95, g: 0.8, b: 0.2, a: 1}
+  healthRedColor: {r: 0.9, g: 0.2, b: 0.2, a: 1}
 --- !u!1 &280329283
 GameObject:
   m_ObjectHideFlags: 0
@@ -628,7 +657,7 @@ RectTransform:
   m_GameObject: {fileID: 280329283}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.8957, y: 0.8957, z: 0.8957}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1550345179}
@@ -743,7 +772,7 @@ RectTransform:
   m_GameObject: {fileID: 285265647}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.88229, y: 0.88229, z: 0.88229}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 560184000}
@@ -1329,7 +1358,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 751b8af0a2353314c8b5fb615945da05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LaserDamageController
-  damagePerSecond: 20
+  damagePerSecond: 45
   activationDelay: 0.15
 --- !u!65 &468594913
 BoxCollider:
@@ -1421,6 +1450,10 @@ PrefabInstance:
       propertyPath: m_IsTrigger
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 3613971904228859087, guid: 64bbb26922949a640bcbe2472a3b33a9, type: 3}
+      propertyPath: damagePerSecond
+      value: 45
+      objectReference: {fileID: 0}
     - target: {fileID: 4144245603637054883, guid: 64bbb26922949a640bcbe2472a3b33a9, type: 3}
       propertyPath: m_IsTrigger
       value: 1
@@ -1464,6 +1497,10 @@ PrefabInstance:
     - target: {fileID: 4882644291521147125, guid: 64bbb26922949a640bcbe2472a3b33a9, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4920157494510466074, guid: 64bbb26922949a640bcbe2472a3b33a9, type: 3}
+      propertyPath: damagePerSecond
+      value: 45
       objectReference: {fileID: 0}
     - target: {fileID: 5185977843273941726, guid: 64bbb26922949a640bcbe2472a3b33a9, type: 3}
       propertyPath: m_LocalScale.z
@@ -1902,7 +1939,7 @@ RectTransform:
   m_GameObject: {fileID: 675849052}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.88229, y: 0.88229, z: 0.88229}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 953530777}
@@ -5391,6 +5428,14 @@ PrefabInstance:
       propertyPath: pulsecost
       value: 0.05
       objectReference: {fileID: 0}
+    - target: {fileID: 647950788212322661, guid: 8fb700af38a01b24a886000171918e42, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 647950788212322661, guid: 8fb700af38a01b24a886000171918e42, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 255
+      objectReference: {fileID: 0}
     - target: {fileID: 708661112970473166, guid: 8fb700af38a01b24a886000171918e42, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -5465,7 +5510,7 @@ PrefabInstance:
       objectReference: {fileID: 2100000, guid: 79459efec17a4d00a321bdcc27bbc385, type: 2}
     - target: {fileID: 3944910698706966226, guid: 8fb700af38a01b24a886000171918e42, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4861615085138550089, guid: 8fb700af38a01b24a886000171918e42, type: 3}
       propertyPath: m_RenderMode
@@ -5501,7 +5546,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7058371807355213767, guid: 8fb700af38a01b24a886000171918e42, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7881914885308529104, guid: 8fb700af38a01b24a886000171918e42, type: 3}
       propertyPath: m_Name

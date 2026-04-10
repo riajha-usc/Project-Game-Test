@@ -1,7 +1,5 @@
-using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovement3D : MonoBehaviour
@@ -21,8 +19,6 @@ public class PlayerMovement3D : MonoBehaviour
     [Header("Health")]
     public Rigidbody rb;
     public float hp = 100f;
-    public Slider healthbar;
-    public TMP_Text healthtxt;
     public float maxHp = 0f;
     private bool isDead = false;
 
@@ -88,13 +84,7 @@ public class PlayerMovement3D : MonoBehaviour
 
     void Update()
     {
-        if (healthbar != null)
-        {
-            healthbar.gameObject.SetActive(true);
-        }
         Die();
-        if (healthtxt != null) healthtxt.text = Mathf.RoundToInt(hp) + " / " + Mathf.RoundToInt(maxHp);
-        if (healthbar != null) healthbar.value = hp / maxHp;
 
         //float x = Input.GetAxisRaw("Horizontal");
         float z = Input.GetAxis("Vertical");
@@ -145,14 +135,6 @@ public class PlayerMovement3D : MonoBehaviour
     {
         if (hp <= 0.001f && !isDead)
         {
-            // In a trap tutorial, don't kill the player — reset health and warn them
-            if (TutorialManager.Instance != null && TutorialManager.Instance.tutorialType == "traps")
-            {
-                hp = maxHp;
-                TutorialManager.Instance.ShowPopup("You got hurt! Deactivate the traps first!", 3f);
-                return;
-            }
-
             isDead = true;
 
             if (GameManager.Instance != null)
