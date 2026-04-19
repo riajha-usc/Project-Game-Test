@@ -35,8 +35,17 @@ public class TrapAgentHUD : MonoBehaviour
     {
         bool playing = GameManager.Instance == null ||
                        GameManager.Instance.currentState == GameManager.GameState.Playing;
-        if (_panel != null) _panel.SetActive(playing);
-        if (!playing) return;
+
+        bool overlayShowing =
+            (UIManager.Instance != null &&
+             ((UIManager.Instance.gameOverScreen != null && UIManager.Instance.gameOverScreen.activeSelf) ||
+              (UIManager.Instance.startScreen    != null && UIManager.Instance.startScreen.activeSelf))) ||
+            (TutorialManager.Instance != null &&
+              TutorialManager.Instance.gameOverScreen != null &&
+              TutorialManager.Instance.gameOverScreen.activeSelf);
+
+        if (_panel != null) _panel.SetActive(playing && !overlayShowing);
+        if (!playing || overlayShowing) return;
 
         int charges = TrapCombatAgentManager.Charges;
         _displayedCharges = charges;
@@ -61,8 +70,8 @@ public class TrapAgentHUD : MonoBehaviour
     {
         float circleSize = 48f;
         float spacing    = 24f;
-        float panelW     = Mathf.Max(200f, maxPills * circleSize + (maxPills - 1) * spacing + 48f);
-        float panelH     = 130f;
+        float panelW     = Mathf.Max(220f, maxPills * circleSize + (maxPills - 1) * spacing + 64f);
+        float panelH     = 150f;
 
         _panel = new GameObject("AgentPanel");
         _panel.transform.SetParent(transform, false);
@@ -85,7 +94,7 @@ public class TrapAgentHUD : MonoBehaviour
         titleRT.offsetMax        = new Vector2(-8f, -4f);
         var titleTMP = titleGO.AddComponent<TextMeshProUGUI>();
         titleTMP.text      = "Deactivating Agents";
-        titleTMP.fontSize  = 13f;
+        titleTMP.fontSize  = 19f;
         titleTMP.color     = ColText;
         titleTMP.alignment = TextAlignmentOptions.Center;
         titleTMP.fontStyle = FontStyles.Bold;
@@ -144,7 +153,7 @@ public class TrapAgentHUD : MonoBehaviour
         usesRT.offsetMin = new Vector2(8f, 2f);
         usesRT.offsetMax = new Vector2(-8f, 0f);
         _label = usesGO.AddComponent<TextMeshProUGUI>();
-        _label.fontSize  = 15f;
+        _label.fontSize  = 18f;
         _label.color     = Color.white;
         _label.alignment = TextAlignmentOptions.Center;
     }

@@ -4710,6 +4710,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1774471000887763910, guid: b28cdedd2fab49548b82a38e3bc0f5a2, type: 3}
+      propertyPath: mode
+      value: default
+      objectReference: {fileID: 0}
     - target: {fileID: 4464997882381437087, guid: b28cdedd2fab49548b82a38e3bc0f5a2, type: 3}
       propertyPath: m_Name
       value: TrapCombatAgent - Spikes

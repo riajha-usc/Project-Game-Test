@@ -20,9 +20,9 @@ public class GameLayout : MonoBehaviour
 
     [Header("Health HUD")]
     public bool buildHealthHUD = true;
-    public Vector2 healthHUDTopLeftOffset = new Vector2(16f, -110f);
+    public Vector2 healthHUDTopLeftOffset = new Vector2(310f, -16f);
     public string healthLabelText = "Health";
-    public int healthLabelFontSize = 22;
+    public int healthLabelFontSize = 26;
     public float healthLabelGap = 10f;
     public float healthLabelYOffset = -18f;
     public Vector2 healthSliderSize = new Vector2(172f, 26f);
@@ -78,7 +78,14 @@ public class GameLayout : MonoBehaviour
 
     void Update()
     {
-        if (GameManager.Instance != null && GameManager.Instance.currentState == GameManager.GameState.GameOver)
+        bool tutorialOverlayShowing = TutorialManager.Instance != null &&
+                                      TutorialManager.Instance.gameOverScreen != null &&
+                                      TutorialManager.Instance.gameOverScreen.activeSelf;
+
+        bool gameOverState = GameManager.Instance != null &&
+                             GameManager.Instance.currentState == GameManager.GameState.GameOver;
+
+        if (gameOverState)
         {
             if (rootRect != null)
                 rootRect.gameObject.SetActive(false);
@@ -88,6 +95,10 @@ public class GameLayout : MonoBehaviour
         {
             rootRect.gameObject.SetActive(true);
         }
+
+        // For tutorial completion screen: just hide the health HUD individually
+        if (healthHUDRoot != null)
+            healthHUDRoot.SetActive(!tutorialOverlayShowing);
 
         if (Time.unscaledTime < nextUpdate) return;
         nextUpdate = Time.unscaledTime + updateInterval;
@@ -224,7 +235,7 @@ public class GameLayout : MonoBehaviour
         cluesProgressText = CreateText(cluesObj.transform, "Clues: 0/4", 25);
         cluesProgressText.alignment = TextAlignmentOptions.Center;
         cluesProgressText.textWrappingMode = TextWrappingModes.NoWrap;
-        AddLightBackground(cluesObj, 12);
+        AddLightBackground(cluesObj, 14);
 
         var attemptsObj = new GameObject("AttemptsText");
         attemptsObj.transform.SetParent(rootRect, false);
@@ -237,7 +248,7 @@ public class GameLayout : MonoBehaviour
         attemptsProgressText = CreateText(attemptsObj.transform, "Unlocked Attempts: 0", 25);
         attemptsProgressText.alignment = TextAlignmentOptions.Center;
         attemptsProgressText.textWrappingMode = TextWrappingModes.NoWrap;
-        AddLightBackground(attemptsObj, 12);
+        AddLightBackground(attemptsObj, 14);
 
         BuildControlsPanel();
         if (buildHealthHUD)
@@ -258,7 +269,7 @@ public class GameLayout : MonoBehaviour
         levelRect.anchorMin = new Vector2(0.5f, 1f);
         levelRect.anchorMax = new Vector2(0.5f, 1f);
         levelRect.pivot = new Vector2(0.5f, 1f);
-        levelRect.anchoredPosition = new Vector2(0f, -16f);
+        levelRect.anchoredPosition = new Vector2(0f, -6f);
         levelRect.sizeDelta = new Vector2(260f, 36f);
 
         levelTitleText = CreateText(levelTitleRoot.transform, "Level 1", 28);
@@ -304,14 +315,15 @@ public class GameLayout : MonoBehaviour
         panelRect.anchorMax = new Vector2(0f, 1f);
         panelRect.pivot     = new Vector2(0f, 1f);
         panelRect.anchoredPosition = new Vector2(16f, -16f);
-        panelRect.sizeDelta = new Vector2(270f, 70f);
+        panelRect.sizeDelta = new Vector2(270f, 130f);
 
         AddLightBackground(controlsPanel, 14);
 
+        // Line 1 — Move
         var line1 = new GameObject("ControlsLine1");
         line1.transform.SetParent(controlsPanel.transform, false);
         var r1 = line1.AddComponent<RectTransform>();
-        r1.anchorMin = new Vector2(0f, 0.5f);
+        r1.anchorMin = new Vector2(0f, 0.75f);
         r1.anchorMax = new Vector2(1f, 1f);
         r1.offsetMin = new Vector2(8f, 0f);
         r1.offsetMax = new Vector2(-8f, 0f);
@@ -324,12 +336,12 @@ public class GameLayout : MonoBehaviour
         if (TMP_Settings.defaultFontAsset != null)
             t1.font = TMP_Settings.defaultFontAsset;
 
-        // Line 2 — Key selection
+        // Line 2 — Deactivate Traps
         var line2 = new GameObject("ControlsLine2");
         line2.transform.SetParent(controlsPanel.transform, false);
         var r2 = line2.AddComponent<RectTransform>();
-        r2.anchorMin = new Vector2(0f, 0f);
-        r2.anchorMax = new Vector2(1f, 0.5f);
+        r2.anchorMin = new Vector2(0f, 0.5f);
+        r2.anchorMax = new Vector2(1f, 0.75f);
         r2.offsetMin = new Vector2(8f, 0f);
         r2.offsetMax = new Vector2(-8f, 0f);
         var t2 = line2.AddComponent<TextMeshProUGUI>();
@@ -340,6 +352,40 @@ public class GameLayout : MonoBehaviour
         t2.textWrappingMode = TextWrappingModes.NoWrap;
         if (TMP_Settings.defaultFontAsset != null)
             t2.font = TMP_Settings.defaultFontAsset;
+
+        // Line 3 — View Key Inventory
+        var line3 = new GameObject("ControlsLine3");
+        line3.transform.SetParent(controlsPanel.transform, false);
+        var r3 = line3.AddComponent<RectTransform>();
+        r3.anchorMin = new Vector2(0f, 0.25f);
+        r3.anchorMax = new Vector2(1f, 0.5f);
+        r3.offsetMin = new Vector2(8f, 0f);
+        r3.offsetMax = new Vector2(-8f, 0f);
+        var t3 = line3.AddComponent<TextMeshProUGUI>();
+        t3.text = "<color=#AAAAAA>View Key Inventory:</color>  <b>V</b>";
+        t3.fontSize = 20;
+        t3.color = Color.white;
+        t3.alignment = TextAlignmentOptions.Left;
+        t3.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            t3.font = TMP_Settings.defaultFontAsset;
+
+        // Line 4 — Select Key
+        var line4 = new GameObject("ControlsLine4");
+        line4.transform.SetParent(controlsPanel.transform, false);
+        var r4 = line4.AddComponent<RectTransform>();
+        r4.anchorMin = new Vector2(0f, 0f);
+        r4.anchorMax = new Vector2(1f, 0.25f);
+        r4.offsetMin = new Vector2(8f, 0f);
+        r4.offsetMax = new Vector2(-8f, 0f);
+        var t4 = line4.AddComponent<TextMeshProUGUI>();
+        t4.text = "<color=#AAAAAA>Select Key:</color>  <b>Right Click</b>";
+        t4.fontSize = 20;
+        t4.color = Color.white;
+        t4.alignment = TextAlignmentOptions.Left;
+        t4.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null)
+            t4.font = TMP_Settings.defaultFontAsset;
     }
 
     void AddLightBackground(GameObject parent, float padding, float alpha = 0.92f)
@@ -398,19 +444,19 @@ public class GameLayout : MonoBehaviour
         root.anchorMax = new Vector2(0f, 1f);
         root.pivot = new Vector2(0f, 1f);
         root.anchoredPosition = healthHUDTopLeftOffset;
-        root.sizeDelta = new Vector2(270f, 54f);
+        // Stacked: Health label / bar / value
+        root.sizeDelta = new Vector2(300f, 95f);
 
         AddLightBackground(healthHUDRoot, 14f);
 
-        const float labelWidth = 66f;
+        // Label — top third
         var labelGO = new GameObject("HealthLabel");
         labelGO.transform.SetParent(root, false);
         var labelRect = labelGO.AddComponent<RectTransform>();
-        labelRect.anchorMin = new Vector2(0f, 0.45f);
-        labelRect.anchorMax = new Vector2(0f, 1f);
-        labelRect.pivot    = new Vector2(0f, 0.5f);
-        labelRect.anchoredPosition = new Vector2(8f, 0f);
-        labelRect.sizeDelta = new Vector2(labelWidth, 0f);
+        labelRect.anchorMin = new Vector2(0f, 0.66f);
+        labelRect.anchorMax = new Vector2(1f, 1f);
+        labelRect.offsetMin = new Vector2(8f, 0f);
+        labelRect.offsetMax = new Vector2(-8f, 0f);
         var labelTMP = labelGO.AddComponent<TextMeshProUGUI>();
         labelTMP.text = healthLabelText;
         labelTMP.fontSize = healthLabelFontSize;
@@ -420,14 +466,31 @@ public class GameLayout : MonoBehaviour
         labelTMP.textWrappingMode = TextWrappingModes.NoWrap;
         if (TMP_Settings.defaultFontAsset != null) labelTMP.font = TMP_Settings.defaultFontAsset;
 
+        // Value text — bottom third
+        var valueGO = new GameObject("HealthValueText");
+        valueGO.transform.SetParent(root, false);
+        var valueRect = valueGO.AddComponent<RectTransform>();
+        valueRect.anchorMin = new Vector2(0f, 0f);
+        valueRect.anchorMax = new Vector2(1f, 0.33f);
+        valueRect.offsetMin = new Vector2(8f, 0f);
+        valueRect.offsetMax = new Vector2(-8f, 0f);
+        var valueTMP = valueGO.AddComponent<TextMeshProUGUI>();
+        valueTMP.text = "100 / 100";
+        valueTMP.fontSize = 20;
+        valueTMP.fontStyle = FontStyles.Bold;
+        valueTMP.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+        valueTMP.alignment = TextAlignmentOptions.MidlineLeft;
+        valueTMP.textWrappingMode = TextWrappingModes.NoWrap;
+        if (TMP_Settings.defaultFontAsset != null) valueTMP.font = TMP_Settings.defaultFontAsset;
+
+        // Slider — middle third
         var sliderGO = new GameObject("HealthSlider");
         sliderGO.transform.SetParent(root, false);
         var sliderRect = sliderGO.AddComponent<RectTransform>();
-        sliderRect.anchorMin = new Vector2(0f, 0.45f);
-        sliderRect.anchorMax = new Vector2(0f, 1f);
-        sliderRect.pivot = new Vector2(0f, 0.5f);
-        sliderRect.anchoredPosition = new Vector2(labelWidth + 8f + healthLabelGap, 0f);
-        sliderRect.sizeDelta = new Vector2(healthSliderSize.x, 0f);
+        sliderRect.anchorMin = new Vector2(0f, 0.33f);
+        sliderRect.anchorMax = new Vector2(1f, 0.66f);
+        sliderRect.offsetMin = new Vector2(8f, 0f);
+        sliderRect.offsetMax = new Vector2(-8f, 0f);
 
         var healthSlider = sliderGO.AddComponent<Slider>();
         healthSlider.transition = Selectable.Transition.None;
@@ -444,8 +507,6 @@ public class GameLayout : MonoBehaviour
         bgRect.offsetMin = Vector2.zero;
         bgRect.offsetMax = Vector2.zero;
         var bgImg = bgGO.AddComponent<Image>();
-        bgImg.sprite = null;
-        bgImg.type = Image.Type.Simple;
         bgImg.color = new Color(0f, 0f, 0f, 0.35f);
 
         var fillArea = new GameObject("Fill Area");
@@ -453,8 +514,8 @@ public class GameLayout : MonoBehaviour
         var fillAreaRect = fillArea.AddComponent<RectTransform>();
         fillAreaRect.anchorMin = Vector2.zero;
         fillAreaRect.anchorMax = Vector2.one;
-        fillAreaRect.offsetMin = new Vector2(4f, 3f);
-        fillAreaRect.offsetMax = new Vector2(-4f, -3f);
+        fillAreaRect.offsetMin = new Vector2(2f, 2f);
+        fillAreaRect.offsetMax = new Vector2(-2f, -2f);
 
         var fillGO = new GameObject("Fill");
         fillGO.transform.SetParent(fillArea.transform, false);
@@ -464,28 +525,10 @@ public class GameLayout : MonoBehaviour
         fillRect.offsetMin = Vector2.zero;
         fillRect.offsetMax = Vector2.zero;
         var fillImg = fillGO.AddComponent<Image>();
-        fillImg.sprite = null;
-        fillImg.type = Image.Type.Simple;
         fillImg.color = healthNormalColor;
 
         healthSlider.fillRect = fillRect;
         healthSlider.targetGraphic = fillImg;
-
-        var valueGO = new GameObject("HealthValueText");
-        valueGO.transform.SetParent(root, false);
-        var valueRect = valueGO.AddComponent<RectTransform>();
-        valueRect.anchorMin = new Vector2(0f, 0f);
-        valueRect.anchorMax = new Vector2(1f, 0.42f);
-        valueRect.offsetMin = Vector2.zero;
-        valueRect.offsetMax = Vector2.zero;
-        var valueTMP = valueGO.AddComponent<TextMeshProUGUI>();
-        valueTMP.text = "100 / 100";
-        valueTMP.fontSize = 16;
-        valueTMP.fontStyle = FontStyles.Bold;
-        valueTMP.color = new Color(0.85f, 0.85f, 0.85f, 1f);
-        valueTMP.alignment = TextAlignmentOptions.Center;
-        valueTMP.textWrappingMode = TextWrappingModes.NoWrap;
-        if (TMP_Settings.defaultFontAsset != null) valueTMP.font = TMP_Settings.defaultFontAsset;
 
         healthHUDSlider = healthSlider;
         healthHUDFillImage = fillImg;

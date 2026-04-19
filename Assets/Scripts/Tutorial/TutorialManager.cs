@@ -195,6 +195,19 @@ public class TutorialManager : MonoBehaviour
 
     void Update()
     {
+        if (GameManager.Instance != null && GameObject.FindGameObjectWithTag("Player"))
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            var pl = player.GetComponent<PlayerMovement3D>();
+            if (pl != null && pl.hp == 0)
+            {
+                if (SceneManager.GetActiveScene().name == "Traps-Prototype")
+                    ShowTutorialGameOver(isDeath: true);
+                else
+                    GameManager.Instance.GameOver();
+            }
+        }
+
         if (!_gameStarted)
         {
             if (Input.GetKeyDown(KeyCode.Space))
@@ -792,7 +805,7 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void ShowTutorialGameOver()
+    public void ShowTutorialGameOver(bool isDeath = false)
     {
         HideTutorialPopup();
         HideTutorialArrow();
@@ -811,8 +824,49 @@ public class TutorialManager : MonoBehaviour
         if (gameOverScreen != null)
         {
             WireTutorialGameOverButtons();
-            ApplyTutorialGameOverTexts();
+
+            if (isDeath)
+                ApplyDeathTexts();
+            else
+                ApplyTutorialGameOverTexts();
+
             gameOverScreen.SetActive(true);
+        }
+    }
+
+    void ApplyDeathTexts()
+    {
+        if (gameOverScreen == null) return;
+
+        Transform titleTf = gameOverScreen.transform.Find("Text (TMP)");
+        if (titleTf != null)
+        {
+            TMP_Text title = titleTf.GetComponent<TMP_Text>();
+            if (title != null)
+            {
+                title.fontStyle = FontStyles.Bold;
+                title.text = "You ran out of health!\nRestart the tutorial.";
+                title.color = new Color(0.9f, 0.2f, 0.2f, 1f);
+            }
+        }
+
+        foreach (var btn in gameOverScreen.GetComponentsInChildren<Button>(true))
+        {
+            if (btn == null) continue;
+
+            if (btn.gameObject.name == "LoadNext")
+            {
+                btn.gameObject.SetActive(false);
+                continue;
+            }
+
+            TMP_Text label = btn.GetComponentInChildren<TMP_Text>(true);
+            if (label == null) continue;
+
+            if (btn.gameObject.name == "RestartButton")
+                label.text = "Restart";
+            else if (btn.gameObject.name == "LoadMainMenu")
+                label.text = "Main Menu";
         }
     }
 
@@ -956,7 +1010,7 @@ public class TutorialManager : MonoBehaviour
 
         // Step 2 — enter spike zone and press F
         _spikeDeactivated = false;
-        ShowPopup("Go near the spikes and press F to deactivate!", 0f);
+        ShowPopup("Go near the spikes and press F to deactivate for 5 seconds!", 0f);
         if (trapSpikeZone != null) ShowWorldArrow(trapSpikeZone);
         yield return new WaitUntil(() => _spikeDeactivated);
         HideTutorialPopup();
@@ -978,7 +1032,7 @@ public class TutorialManager : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
 
         _beamDeactivated = false;
-        ShowPopup("Go near the beam and press F to deactivate!", 0f);
+        ShowPopup("Go near the beam and press F to deactivate for 5 seconds!", 0f);
         if (trapBeamZone != null) ShowWorldArrow(trapBeamZone);
         yield return new WaitUntil(() => _beamDeactivated);
         HideTutorialPopup();

@@ -244,7 +244,7 @@ public class LevelTimer : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 1f);
         rect.anchorMax = new Vector2(0.5f, 1f);
         rect.pivot     = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -62f);
+        rect.anchoredPosition = new Vector2(0f, -48f);
         rect.sizeDelta = new Vector2(260f, 58f);
 
         var bg = new GameObject("BG");

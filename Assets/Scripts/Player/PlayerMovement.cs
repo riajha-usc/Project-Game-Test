@@ -133,20 +133,23 @@ public class PlayerMovement3D : MonoBehaviour
     }
     private void Die()
     {
-        if (hp <= 0.001f && !isDead)
-        {
-            isDead = true;
+        if (isDead) return;
+        if (hp > 0.001f) return;
 
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.GameOver();
-            }
-
-            if (UIManager.Instance != null && UIManager.Instance.gameOverScreen != null)
-                UIManager.Instance.gameOverScreen.SetActive(true);
-
-            // Stop player movement but keep script active so restart logic can run
+        isDead = true;
+        if (controller != null)
             controller.enabled = false;
+
+        string sceneName = SceneManager.GetActiveScene().name;
+
+        if ((sceneName == "Tutorial-1" || sceneName == "Traps-Prototype")
+            && TutorialManager.Instance != null)
+        {
+            TutorialManager.Instance.ShowTutorialGameOver(isDeath: true);
+        }
+        else if (GameManager.Instance != null)
+        {
+            GameManager.Instance.GameOver();
         }
     }
 

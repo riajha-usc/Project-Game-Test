@@ -135,6 +135,14 @@ public class KeyInventoryUI : MonoBehaviour
     {
         doorInRange = inRange;
         UpdateButtonsInteractable();
+
+        if (inRange && KeyInventory.Instance != null && !KeyInventory.Instance.HasAllKeys()
+            && (SceneName == "Level1" || SceneName == "Level2"))
+        {
+            int collected = KeyInventory.Instance.keys.Count;
+            int total     = KeyInventory.Instance.requiredKeyCount;
+            ShowPopup($"Collect all keys first! ({collected}/{total} collected)", 3f);
+        }
     }
 
     public void Refresh()

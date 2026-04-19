@@ -167,15 +167,24 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 0f;
 
         Cursor.lockState = CursorLockMode.None;
-        Cursor.visible   = true;
-
+        Cursor.visible = true;
 
         SubmitLevelAnalytics(false);
 
-        if (UIManager.Instance != null)
+        string sceneName = SceneManager.GetActiveScene().name;
+        bool isTutorialScene =
+            sceneName == "Tutorial-1" ||
+            sceneName == "Traps-Prototype";
+
+        if (isTutorialScene && TutorialManager.Instance != null)
+        {
+            TutorialManager.Instance.ShowTutorialGameOver();
+        }
+        else if (UIManager.Instance != null)
         {
             UIManager.Instance.ShowGameOver();
         }
+
         if (GameLayout.Instance != null)
             GameLayout.Instance.HideWrongFeedback();
 
@@ -187,8 +196,9 @@ public class GameManager : MonoBehaviour
             lane3.CloseInputPanel();
             lane3.HidePrompt();
         }
+
         Cursor.lockState = CursorLockMode.None;
-        Cursor.visible   = true;
+        Cursor.visible = true;
     }
 
     // Restart the entire level (load the first lane scene)
